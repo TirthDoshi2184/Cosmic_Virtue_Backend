@@ -1,6 +1,8 @@
 const axios = require('axios');
 
-const BASE_URL = 'https://api.nimbuspost.com/v1';
+const BASE_URL = 'https://ship.nimbuspost.com/api';
+
+const FormData = require('form-data');
 
 // Token cache to avoid re-generating on every request
 let cachedToken = null;
@@ -29,19 +31,18 @@ const getNimbusToken = async () => {
   return cachedToken;
 };
 // Check if pincode is serviceable and get courier rates
-const checkServiceability = async (pickupPincode, deliveryPincode, weight, isCOD = false) => {
-  const token = await getNimbusToken();
-  console.log(`Checking pickup for ${pickupPincode} (COD: ${isCOD})`);
-  console.log(`Checking serviceability for ${deliveryPincode} (COD: ${isCOD})`);
-  console.log('Token:', token ? '✅' : '❌');
+const checkServiceability = async (deliveryPincode, isCOD = false) => {
+  const form = new FormData();
+  form.append('pickup_postcode', process.env.NIMBUS_SELLER_PINCODE);
+  form.append('delivery_postcode', deliveryPincode);
+  form.append('weight', 300);
+  form.append('cod', isCOD ? 1 : 0);
 
-  const res = await axios.post(`${BASE_URL}/courier/serviceability`, {
-    pickup_postcode: pickupPincode,
-    delivery_postcode: deliveryPincode,
-    weight: weight,          // in kg (e.g., 0.5 for 500g)
-    cod: isCOD ? 1 : 0
-  }, {
-    headers: { Authorization: `Bearer ${token}` }
+  const res = await axios.post(`https://ship.nimbuspost.com/api/courier/serviceability`, form, {
+    headers: {
+      'NP-API-KEY': process.env.NIMBUS_API_KEY,
+      ...form.getHeaders()
+    }
   });
 
   return res.data;
@@ -49,7 +50,7 @@ const checkServiceability = async (pickupPincode, deliveryPincode, weight, isCOD
 
 // Create shipment after order is placed
 const createShipment = async (order) => {
-  // const token = await getNimbusToken();
+  const token = await getNimbusToken();
   console.log(`Creating shipment for order ${order.orderNumber} (COD: ${order.paymentMethod === 'cod'})`);
   console.log('Token:', token ? '✅' : '❌');
 
@@ -70,61 +71,57 @@ const createShipment = async (order) => {
   //   console.error('Wallet check failed:', walletErr.message);
   //   // Continue anyway — don't block shipment for wallet check failure
   // }
-  const payload = {
-    order_number:       order.orderNumber,
-    payment_type:       order.paymentMethod === 'cod' ? 'cod' : 'prepaid',
-    package_weight:     0.5,        // kg — update per your candle product weight
-    package_length:     15,         // cm
-    package_breadth:    10,
-    package_height:     10,
-    sub_total:          order.pricing.subtotal,
-    cod_amount:         order.paymentMethod === 'cod' ? order.pricing.total : 0,
-    discount:           0,
 
-    // Seller (your warehouse — from NimbusPost dashboard pickup address)
-    seller_name:        process.env.NIMBUS_SELLER_NAME,
-    seller_address:     process.env.NIMBUS_SELLER_ADDRESS,
-    seller_city:        process.env.NIMBUS_SELLER_CITY,
-    seller_state:       process.env.NIMBUS_SELLER_STATE,
-    seller_pincode:     process.env.NIMBUS_SELLER_PINCODE,
-    seller_phone:       process.env.NIMBUS_SELLER_PHONE,
+  const form = new FormData();
 
-    // Buyer (from order)
-    shipping_customer_name:  `${order.contactInfo.firstName} ${order.contactInfo.lastName}`,
-    shipping_phone:          order.contactInfo.phone,
-    shipping_address:        order.shippingAddress.address,
-    shipping_city:           order.shippingAddress.city,
-    shipping_state:          order.shippingAddress.state,
-    shipping_pincode:        order.shippingAddress.pincode,
-    shipping_country:        'India',
+  // Core fields
+  form.append('order_number',   order.orderNumber);
+  form.append('payment_method', order.paymentMethod === 'cod' ? 'COD' : 'prepaid');
+  form.append('amount',         Math.round(order.pricing.total));
 
-    // Products
-    order_items: order.items.map(item => ({
-      name:     item.name,
-      qty:      item.quantity,
-      price:    item.price,
-      sku:      item.productId?.toString() || 'CANDLE-SKU'
-    })),
+  // Seller
+  form.append('seller_name',    process.env.NIMBUS_SELLER_NAME);
+  form.append('seller_address', process.env.NIMBUS_SELLER_ADDRESS);
+  form.append('seller_city',    process.env.NIMBUS_SELLER_CITY);
+  form.append('seller_state',   process.env.NIMBUS_SELLER_STATE);
+  form.append('seller_pincode', parseInt(process.env.NIMBUS_SELLER_PINCODE));
+  form.append('seller_phone',   parseInt(process.env.NIMBUS_SELLER_PHONE));
 
-    // Let NimbusPost auto-assign best courier, or hardcode one from dashboard
-    // courier_id: process.env.NIMBUS_DEFAULT_COURIER_ID || null
-  };
+  // Buyer
+  form.append('fname',   order.contactInfo.firstName);
+  form.append('lname',   order.contactInfo.lastName);
+  form.append('address', order.shippingAddress.address);
+  form.append('phone',   parseInt(order.contactInfo.phone) || 9999999999);
+  form.append('city',    order.shippingAddress.city);
+  form.append('state',   order.shippingAddress.state);
+  form.append('country', 'India');
+  form.append('pincode', parseInt(order.shippingAddress.pincode));
 
-    console.log('=== SHIPMENT DEBUG ===');
-  console.log('Order Number:', payload.order_number);
-  console.log('Payment Type:', payload.payment_type);
-  console.log('Seller Pincode:', payload.seller_pincode);
-  console.log('Shipping Pincode:', payload.shipping_pincode);
-  console.log('COD Amount:', payload.cod_amount);
-   console.log('Full Payload:', JSON.stringify(payload, null, 2));
+  // Package (weight in grams as per docs)
+  form.append('weight',  300);
+  form.append('length',  15);
+  form.append('breadth', 10);
+  form.append('height',  10);
+
+  // Products in PHP array format
+  order.items.forEach((item, index) => {
+    form.append(`products[${index}][name]`,  item.name);
+    form.append(`products[${index}][qty]`,   item.quantity);
+    form.append(`products[${index}][price]`, item.price);
+  });
+
+  console.log('Sending shipment for order:', order.orderNumber);
 
   try {
-    const res = await axios.post(`${BASE_URL}/orders/create`, payload, {
-      headers: { Authorization: `Bearer ${process.env.NIMBUS_API_KEY}` }
+    const res = await axios.post('https://ship.nimbuspost.com/api/orders/create', form, {
+      headers: {
+        'NP-API-KEY': process.env.NIMBUS_API_KEY,
+        ...form.getHeaders()
+      }
     });
+    console.log('✅ NimbusPost Success:', res.data);
     return res.data;
   } catch (error) {
-    // ADD THIS - see what NimbusPost actually says
     console.error('❌ NimbusPost API Error:');
     console.error('Status:', error.response?.status);
     console.error('Error Data:', JSON.stringify(error.response?.data, null, 2));

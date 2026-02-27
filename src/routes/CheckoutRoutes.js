@@ -68,31 +68,8 @@ router.get('/admin/wallet-balance', async (req, res) => {
 });
 
 
-router.get('/serviceability/:pincode', async (req, res) => {
-  try {
-    const { checkServiceability } = require('../utils/nimbuspost');
-
-    const result = await checkServiceability(
-      process.env.NIMBUS_SELLER_PINCODE,  // your warehouse pincode
-      req.params.pincode,                  // customer's pincode
-      0.5,                                 // default weight 500g
-      false
-    );
-
-    const couriers   = result?.data || [];
-    const serviceable = couriers.length > 0;
-
-    res.json({
-      success:     true,
-      serviceable: serviceable,
-      couriers:    couriers.length,
-      cheapest:    serviceable ? couriers[0]?.rate : null
-    });
-
-  } catch (error) {
-    // If NimbusPost is down, don't block checkout
-    res.json({ success: true, serviceable: true, error: error.message });
-  }
+router.get('/serviceability/:pincode', (req, res) => {
+  req.query.pincode = req.params.pincode;
+  checkoutController.checkServiceability(req, res);
 });
-
 module.exports = router;

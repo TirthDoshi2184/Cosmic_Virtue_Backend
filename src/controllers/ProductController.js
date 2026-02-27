@@ -27,6 +27,25 @@ const createProduct = async (req, res) => {
     }
 };
 
+const createmultipleProducts = async (req, res) => {
+    try {
+        const { products } = req.body; // expects array of product objects
+        if (!Array.isArray(products) || products.length === 0) {
+            return res.status(400).json({ 
+                error: 'Please provide an array of products' 
+            });
+        }
+        const createdProducts = await ProductSchema.insertMany(products);
+        res.status(201).json({
+            message: `${createdProducts.length} products created successfully`,
+            data: createdProducts
+        });
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+};
+
+
 // Get all products
 const getAllProducts = async (req, res) => {
     try {
@@ -112,6 +131,7 @@ module.exports = {
     getAllProducts,
     getProductbyId,
     updateProduct,
-    deleteProduct
+    deleteProduct,
+    createmultipleProducts
 };
 

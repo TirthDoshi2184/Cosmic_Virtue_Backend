@@ -38,7 +38,7 @@ const ProductSchema = new Schema({
         default: []
     },
     img:{
-        type: String,
+        type: [String],
         // required: true,
     },
     isNewArrival: {

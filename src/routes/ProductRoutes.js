@@ -4,6 +4,10 @@ const router = express.Router();
 
 // Route to create a new product
 router.post('/', ProductController.createProduct);
+
+// Route to create multiple products
+router.post('/bulk', ProductController.createmultipleProducts);
+
 // Route to get all products
 router.get('/', ProductController.getAllProducts);
 
