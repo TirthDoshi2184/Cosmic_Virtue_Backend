@@ -16,6 +16,10 @@ const CategorySchema = new Schema({
     imageUrl: {
         type: String,
         trim: true,
+    },
+    isactive:{
+        type:Boolean,
+        default:false
     }
 }, { timestamps: true });
 
