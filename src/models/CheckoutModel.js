@@ -150,7 +150,8 @@ items: [{
     },
     tax: {
       type: Number,
-      required: true
+      required: false,
+      default : 0
     },
     total: {
       type: Number,
