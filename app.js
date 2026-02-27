@@ -12,7 +12,13 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 const cors = require('cors');
-app.use(cors());
+app.use(cors({
+  origin: [
+    'http://localhost:3000',
+    'https://cosmic-virtue-frontend.vercel.app'
+  ],
+  credentials: true
+}));
 
 // Middleware
 app.use(express.json());
