@@ -16,7 +16,9 @@ app.use(cors({
   origin: [
     'http://localhost:3000',
     'http://localhost:5173',
-    'https://cosmic-virtue-frontend.vercel.app'
+    'https://cosmic-virtue-frontend.vercel.app',
+    'https://www.cosmicvirtues.com',
+    'https://cosmicvirtues.com',
   ],
   credentials: true
 }));
