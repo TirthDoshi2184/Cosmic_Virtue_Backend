@@ -1,6 +1,6 @@
 const ProductSchema = require('../models/ProductModel');
 // Add this at the top of ProductController.js
-const CategorySchema = require('../models/CategoryModel');
+const Category = require('../models/CategoryModel');
 
 // Create new product
 const createProduct = async (req, res) => {
@@ -67,7 +67,7 @@ const getAllProducts = async (req, res) => {
 
         if (category && category !== 'all') {
             // Support filtering by category name via populated field
-            const categoryDoc = await CategorySchema.findOne({ 
+            const categoryDoc = await Category.findOne({ 
                 name: new RegExp(category, 'i') 
             });
             if (categoryDoc) filter.category = categoryDoc._id;
