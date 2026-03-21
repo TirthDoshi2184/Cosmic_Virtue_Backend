@@ -19,7 +19,8 @@ const CategorySchema = new Schema({
     },
     isactive:{
         type:Boolean,
-        default:false
+        default:false,
+        index : true, // index for faster queries on active categories
     }
 }, { timestamps: true });
 

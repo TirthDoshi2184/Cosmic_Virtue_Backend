@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
+
 const ProductSchema = new Schema({
     name: {
         type: String,
@@ -50,5 +51,22 @@ const ProductSchema = new Schema({
         default: false,
     },
 }, { timestamps: true });
+
+// ── INDEXES FOR FASTER QUERIES ──────────────────────────────────────────────
+
+// Speeds up filtering by category + price range (most common query pattern)
+ProductSchema.index({ category: 1, price: 1 });
+
+// Speeds up sorting by newest arrivals and best sellers
+ProductSchema.index({ isBestSeller: -1, createdAt: -1 });
+ProductSchema.index({ isNewArrival: -1, createdAt: -1 });
+
+// Speeds up text search on name, description, fragrance
+ProductSchema.index(
+    { name: 'text', description: 'text', fragnance: 'text' },
+    { weights: { name: 10, fragnance: 5, description: 1 } } // name matches ranked highest
+);
+
+// ────────────────────────────────────────────────────────────────────────────
 
 module.exports = mongoose.model('Product', ProductSchema);
