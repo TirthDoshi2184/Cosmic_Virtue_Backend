@@ -11,13 +11,16 @@ router.post('/bulk', ProductController.createmultipleProducts);
 // Route to get all products
 router.get('/', ProductController.getAllProducts);
 
-// Route to get a product by ID
-router.get('/:id', ProductController.getProductbyId);
-
 // Route to update a product by ID
 router.put('/:id', ProductController.updateProduct);
 
 // Route to delete a product by ID
 router.delete('/:id', ProductController.deleteProduct); 
+
+router.get('/new-arrivals', ProductController.getNewArrivals);
+router.get('/best-sellers', ProductController.getBestSellers);
+
+// Route to get a product by ID
+router.get('/:id', ProductController.getProductbyId);
 
 module.exports = router;

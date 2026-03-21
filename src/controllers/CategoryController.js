@@ -1,11 +1,11 @@
-const CategorySchema = require('../models/CategoryModel');
+const Category = require('../models/CategoryModel');
 
 // Create new category
 const createCategory = async (req, res) => {
     try {
         const { name, howtoUse, imageUrl } = req.body;
         
-        const category = new CategorySchema({
+        const category = new Category({
             name,
             howtoUse,
             imageUrl
@@ -23,13 +23,20 @@ const createCategory = async (req, res) => {
 // Get all categories
 const getAllCategories = async (req, res) => {
     try {
-        const categories = await CategorySchema.find();
+        const { activeOnly } = req.query;
+
+        const filter = {};
+        if (activeOnly === 'true') filter.isactive = true;
+
+        const categories = await Category.find(filter)
+            .select('name imageUrl isactive')  // drop howtoUse — homepage doesn't need it
+            .lean();                            // plain JS object, faster than Mongoose docs
+
         res.status(200).json({
             data: categories,
             message: "Successfully got all the Categories"
         });
-    }
-    catch (error) {
+    } catch (error) {
         res.status(500).json({
             message: "Error fetching categories",
             error: error.message
@@ -47,7 +54,7 @@ const createMultipleCategories = async (req, res) => {
             });
         }
         
-        const createdCategories = await CategorySchema.insertMany(categories);
+        const createdCategories = await Category.insertMany(categories);
         
         res.status(201).json({
             message: `${createdCategories.length} categories created successfully`,

@@ -1,4 +1,6 @@
 const ProductSchema = require('../models/ProductModel');
+// Add this at the top of ProductController.js
+const CategorySchema = require('../models/CategoryModel');
 
 // Create new product
 const createProduct = async (req, res) => {
@@ -49,11 +51,76 @@ const createmultipleProducts = async (req, res) => {
 // Get all products
 const getAllProducts = async (req, res) => {
     try {
-        const products = await ProductSchema.find().populate('category');
+        const {
+            page = 1,
+            limit = 10,
+            category,
+            minPrice,
+            maxPrice,
+            sortBy = 'createdAt',
+            order = 'desc',
+            search
+        } = req.query;
+
+        // Build filter object
+        const filter = {};
+
+        if (category && category !== 'all') {
+            // Support filtering by category name via populated field
+            const categoryDoc = await CategorySchema.findOne({ 
+                name: new RegExp(category, 'i') 
+            });
+            if (categoryDoc) filter.category = categoryDoc._id;
+        }
+
+        if (minPrice || maxPrice) {
+            filter.price = {};
+            if (minPrice) filter.price.$gte = Number(minPrice);
+            if (maxPrice) filter.price.$lte = Number(maxPrice);
+        }
+
+        if (search) {
+            filter.$or = [
+                { name: new RegExp(search, 'i') },
+                { description: new RegExp(search, 'i') },
+                { fragnance: new RegExp(search, 'i') }
+            ];
+        }
+
+        // Sort map
+        const sortMap = {
+            'price-low':  { price: 1 },
+            'price-high': { price: -1 },
+            'rating':     { rating: -1 },
+            'featured':   { trending: -1, createdAt: -1 },
+        };
+        const sort = sortMap[sortBy] || { createdAt: -1 };
+
+        const skip = (Number(page) - 1) * Number(limit);
+
+        // Run query + count in parallel
+        const [products, total] = await Promise.all([
+            ProductSchema.find(filter)
+                .populate('category', 'name')   // only fetch name field
+                .select('-__v -keyFeatures -ingredients') // drop heavy unused fields
+                .sort(sort)
+                .skip(skip)
+                .limit(Number(limit))
+                .lean(),                        // plain JS object, faster than Mongoose docs
+            ProductSchema.countDocuments(filter)
+        ]);
+
         res.status(200).json({
             data: products,
+            pagination: {
+                total,
+                page: Number(page),
+                limit: Number(limit),
+                totalPages: Math.ceil(total / Number(limit))
+            },
             message: "Successfully got all the Products"
         });
+
     } catch (error) {
         res.status(500).json({
             message: "Error fetching products",
@@ -61,7 +128,6 @@ const getAllProducts = async (req, res) => {
         });
     }
 };
-
 const getProductbyId = async (req, res) => {
     try {
         const product = await ProductSchema.findById(req.params.id).populate('category');
@@ -126,12 +192,44 @@ const deleteProduct = async (req, res) => {
     }   
 };
 
+const getNewArrivals = async (req, res) => {
+    try {
+        const products = await ProductSchema.find({ isNewArrival: true })
+            .populate('category', 'name')
+            .select('name price img isNewArrival isBestSeller category rating dimension salePercentage')
+            .sort({ createdAt: -1 })
+            .limit(6)
+            .lean();
+
+        res.status(200).json({ data: products, message: "Successfully got new arrivals" });
+    } catch (error) {
+        res.status(500).json({ message: "Error fetching new arrivals", error: error.message });
+    }
+};
+
+const getBestSellers = async (req, res) => {
+    try {
+        const products = await ProductSchema.find({ isBestSeller: true })
+            .populate('category', 'name')
+            .select('name price img isNewArrival isBestSeller category rating dimension salePercentage')
+            .sort({ createdAt: -1 })
+            .limit(6)
+            .lean();
+
+        res.status(200).json({ data: products, message: "Successfully got best sellers" });
+    } catch (error) {
+        res.status(500).json({ message: "Error fetching best sellers", error: error.message });
+    }
+};
+
 module.exports = {
     createProduct,
     getAllProducts,
     getProductbyId,
     updateProduct,
     deleteProduct,
-    createmultipleProducts
+    createmultipleProducts,
+    getNewArrivals,
+    getBestSellers
 };
 
