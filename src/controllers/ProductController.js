@@ -1,6 +1,5 @@
 const ProductSchema = require('../models/ProductModel');
 // Add this at the top of ProductController.js
-
 const Category = require('../models/CategoryModel');
 
 // Create new product
