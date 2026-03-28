@@ -1,89 +1,121 @@
   const Checkout = require('../models/CheckoutModel');
   const Address = require('../models/AddressModel');
-  const OTP = require('../models/OtpModel');
+  // const OTP = require('../models/OtpModel');
   // ADD this line after your existing requires
   const { createShipment, trackShipment, cancelShipment,checkServiceability } = require('../utils/nimbuspost');
   const { createRazorpayOrder, verifyPaymentSignature } = require('../utils/razorpay');
   const Cart = require('../models/CartModel');
-  const { sendEmail,sendOTPEmail, sendOrderConfirmationEmail, sendOrderConfirmationSMS,sendEmailSafe } = require('../utils/email');
+  const { sendEmai, sendOrderConfirmationEmail, sendOrderConfirmationSMS,sendEmailSafe } = require('../utils/email');
 const { default: axios } = require('axios');
+const { verifyFirebaseToken } = require('../utils/firebaseAdmin');
   // ============================================
   // OTP FUNCTIONS
   // ============================================
 
   // Send OTP
   // CHANGE: sendOTP function
-  exports.sendOTP = async (req, res) => {
-    const { email } = req.body; // CHANGED: phone → email
+//   exports.sendOTP = async (req, res) => {
+//   const { phone } = req.body;
 
-    if (!email || !/\S+@\S+\.\S+/.test(email)) { // CHANGED: validation
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid email address'
-      });
+//   if (!phone || !/^[0-9]{10}$/.test(phone)) {
+//     return res.status(400).json({ success: false, message: 'Invalid phone number' });
+//   }
+
+//   if (process.env.SKIP_OTP === 'true') {
+//     return res.status(200).json({ success: true, message: 'OTP skipped (dev mode)' });
+//   }
+
+//   try {
+//     await OTP.deleteMany({ phone });
+
+//     await sendOTPviaMSG91(phone);  // will now throw if MSG91 fails
+
+//     await OTP.create({
+//       phone,
+//       otp: 'MSG91',
+//       expiresAt: new Date(Date.now() + 5 * 60 * 1000)
+//     });
+
+//     res.status(200).json({ success: true, message: 'OTP sent to your phone' });
+
+//   } catch (error) {
+//     console.error('MSG91 sendOTP failed:', error.message);
+//     res.status(500).json({
+//       success: false,
+//       message: 'Failed to send OTP. Please try again.',
+//       error: error.message   // remove this line in production
+//     });
+//   }
+// };
+exports.sendOTP = async (req, res) => {
+  // Firebase handles OTP sending on the frontend directly
+  // This endpoint is no longer needed but kept for route compatibility
+  res.status(200).json({ 
+    success: true, 
+    message: 'Use Firebase on frontend to send OTP' 
+  });
+};
+
+exports.verifyOTP = async (req, res) => {
+  const { phone, firebaseToken } = req.body;
+
+  if (process.env.SKIP_OTP === 'true') {
+    return res.status(200).json({ success: true, message: 'OTP verification skipped' });
+  }
+
+  if (!phone || !firebaseToken) {
+    return res.status(400).json({ success: false, message: 'Phone and token are required' });
+  }
+
+  try {
+    const decoded = await verifyFirebaseToken(firebaseToken);
+
+    // Make sure the token belongs to this phone number
+    const tokenPhone = decoded.phone_number; // e.g. '+919876543210'
+    const expectedPhone = `+91${phone}`;
+
+    if (tokenPhone !== expectedPhone) {
+      return res.status(400).json({ success: false, message: 'Phone number mismatch' });
     }
 
-    if (process.env.SKIP_OTP === 'true') {
-      return res.status(200).json({
-        success: true,
-        message: 'OTP skipped (development mode)',
-        otp: '123456'
-      });
-    }
+    // OTP is valid — no need to store anything in MongoDB
+    res.status(200).json({ success: true, message: 'Phone verified successfully' });
 
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-
-    await OTP.deleteMany({ email }); // CHANGED: phone → email
-
-    await OTP.create({
-      email, // CHANGED: phone → email
-      otp,
-      expiresAt: new Date(Date.now() + 5 * 60 * 1000)
-    });
-
-    await sendOTPEmail(email, otp); // CHANGED: sendOTPSMS → sendOTPEmail
-
-    res.status(200).json({
-      success: true,
-      message: 'OTP sent to your email'
-    });
-  };
-
+  } catch (error) {
+    console.error('Firebase token verification failed:', error.message);
+    res.status(400).json({ success: false, message: 'Invalid or expired verification. Please retry.' });
+  }
+};
   // CHANGE: verifyOTP function
-  exports.verifyOTP = async (req, res) => {
-    const { email, otp } = req.body; // CHANGED: phone → email
+//   exports.verifyOTP = async (req, res) => {
+//   const { phone, otp } = req.body;
 
-    if (process.env.SKIP_OTP === 'true') {
-      return res.status(200).json({
-        success: true,
-        message: 'OTP verification skipped'
-      });
-    }
+//   if (process.env.SKIP_OTP === 'true') {
+//     return res.status(200).json({ success: true, message: 'OTP verification skipped' });
+//   }
 
-    const record = await OTP.findOne({ email, otp }); // CHANGED: phone → email
+//   // Check OTP was actually sent
+//   const record = await OTP.findOne({ phone });
+//   if (!record) {
+//     return res.status(400).json({ success: false, message: 'Please request OTP first' });
+//   }
 
-    if (!record) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid OTP'
-      });
-    }
+//   if (record.expiresAt < new Date()) {
+//     await OTP.deleteMany({ phone });
+//     return res.status(400).json({ success: false, message: 'OTP expired' });
+//   }
 
-    if (record.expiresAt < new Date()) {
-      return res.status(400).json({
-        success: false,
-        message: 'OTP expired'
-      });
-    }
+//   // Verify via MSG91
+//   const result = await verifyOTPviaMSG91(phone, otp);
 
-    await OTP.deleteMany({ email }); // CHANGED: phone → email
+//   if (result.type !== 'success') {
+//     return res.status(400).json({ success: false, message: 'Invalid OTP' });
+//   }
 
-    res.status(200).json({
-      success: true,
-      message: 'Email verified successfully'
-    });
-  };
+//   await OTP.deleteMany({ phone });
 
+//   res.status(200).json({ success: true, message: 'Phone verified successfully' });
+// };
   // Verify OTP
   // exports.verifyOTP = async (req, res) => {
   //   try {

@@ -38,6 +38,7 @@ const reviewRoutes = require('./src/routes/ReviewRoutes');
 const checkoutRoutes = require('./src/routes/CheckoutRoutes');
 const cartRoutes = require('./src/routes/CartRoutes');
 const wishlistRoutes = require('./src/routes/WishlistRoutes');
+const adminRoutes = require('./src/routes/AdminRoutes');
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use('/users', userRoutes);
@@ -47,6 +48,7 @@ app.use('/checkout', checkoutRoutes);
 app.use('/reviews', reviewRoutes);
 app.use('/cart', cartRoutes);
 app.use('/wishlist', wishlistRoutes);
+app.use('/admin', adminRoutes);
 
 // Start server
 app.listen(PORT, () => {
