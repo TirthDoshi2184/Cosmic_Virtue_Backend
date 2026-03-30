@@ -391,7 +391,7 @@ exports.verifyOTP = async (req, res) => {
         name: item.name,
         price: item.price,
         quantity: item.quantity,
-        image: item.image,
+         image: Array.isArray(item.image) ? item.image[0] : item.image, 
         size: item.size || 'Standard'
       }));
 
