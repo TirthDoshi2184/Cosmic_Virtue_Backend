@@ -242,7 +242,7 @@ exports.verifyOTP = async (req, res) => {
       } = req.body;
 
       // Validate required fields
-      if (!email || !firstName || !lastName || !address || !city || !state || !pincode) {
+      if (!phone || !firstName || !lastName || !address || !city || !state || !pincode) {
         return res.status(400).json({
           success: false,
           message: 'Required fields are missing'
@@ -252,7 +252,7 @@ exports.verifyOTP = async (req, res) => {
       // If this is set as default, unset other default addresses for this phone
       if (isDefault) {
         await Address.updateMany(
-          { email }, // CHANGED: phone → email
+          { phone }, // CHANGED: email → phone
           { isDefault: false }
         );
       }
@@ -292,18 +292,18 @@ exports.verifyOTP = async (req, res) => {
   };
 
   // Get Addresses by Phone
-  exports.getAddressesByEmail = async (req, res) => {
+  exports.getAddressesByPhone = async (req, res) => {
     try {
-      const { email } = req.params;
+      const { phone } = req.params;
 
-      if (!email) {
+      if (!phone) {
         return res.status(400).json({
           success: false,
-          message: 'Email is required'
+          message: 'Phone is required'
         });
       }
 
-      const addresses = await Address.find({ email })
+      const addresses = await Address.find({ phone})
         .sort({ isDefault: -1, createdAt: -1 });
 
       res.status(200).json({
@@ -365,7 +365,7 @@ exports.verifyOTP = async (req, res) => {
         items,
         paymentMethod,
         pricing,
-        emailVerified,
+        phoneVerified,
         userId
       } = req.body;
 
@@ -377,11 +377,11 @@ exports.verifyOTP = async (req, res) => {
         });
       }
 
-      // Validate email verification for non-logged in users
-      if (!userId && !emailVerified) {
+      // Validate phone verification for non-logged in users
+      if (!userId && !phoneVerified) {
         return res.status(400).json({
           success: false,
-          message: 'Email verification required'
+          message: 'Phone verification required'
         });
       }
 
@@ -403,7 +403,7 @@ exports.verifyOTP = async (req, res) => {
         items: formattedItems,
         paymentMethod,
         pricing,
-        emailVerified: emailVerified || false,
+        phoneVerified: phoneVerified || false,
         userId: userId || null,
         orderStatus: 'pending',
         paymentStatus: paymentMethod === 'cod' ? 'pending' : 'pending'
@@ -525,11 +525,11 @@ exports.verifyOTP = async (req, res) => {
   };
 
   // CHANGE: getOrdersByEmail (rename from getOrdersByPhone)
-  exports.getOrdersByEmail = async (req, res) => {
-    const { email } = req.params; // CHANGED
+  exports.getOrdersByPhone = async (req, res) => {
+    const { phone } = req.params; // CHANGED
 
     const orders = await Checkout.find({ 
-      'contactInfo.email': email // CHANGED
+      'contactInfo.phone': phone // CHANGED
     })
       .sort({ createdAt: -1 });
 
