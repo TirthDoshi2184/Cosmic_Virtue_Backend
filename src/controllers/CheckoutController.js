@@ -456,14 +456,11 @@ exports.verifyOTP = async (req, res) => {
           const orderWithNumber = { ...order.toObject(), orderNumber };
           const nimbusData = await createShipment(orderWithNumber);
           
-          if (nimbusData?.data?.awb_number) {
-            order.nimbusAwb = nimbusData.data.awb_number;
-            order.nimbusCourier = nimbusData.data.courier_name;
-            order.nimbusOrderId = nimbusData.data.order_id?.toString();
-            order.trackingNumber = nimbusData.data.awb_number;
-            order.orderStatus = 'confirmed';
-            await order.save();
-          }
+          if (nimbusData?.data) {
+  order.nimbusOrderId = nimbusData.data.toString();
+  order.orderStatus = 'confirmed';
+  await order.save();
+}
         } catch (nimbusError) {
           console.error('NimbusPost COD shipment failed:', nimbusError.message);
         }
@@ -789,9 +786,6 @@ exports.verifyOTP = async (req, res) => {
           }
         }
       });
-    console.log('✅ NimbusPost Success:', res.data);
-// ADD THIS:
-console.log('✅ Full structure:', JSON.stringify(res.data, null, 2));
 
     } catch (error) {
       console.error('Payment verification error:', error);
@@ -806,6 +800,7 @@ console.log('✅ Full structure:', JSON.stringify(res.data, null, 2));
 
   exports.nimbusWebhook = async (req, res) => {
     try {
+      console.log('Full webhook body:', JSON.stringify(req.body, null, 2));
       const { awb_number, current_status, location, timestamp } = req.body;
 
       console.log('NimbusPost Webhook:', { awb_number, current_status });
@@ -832,10 +827,21 @@ console.log('✅ Full structure:', JSON.stringify(res.data, null, 2));
       const mappedStatus = statusMap[current_status];
 
       if (mappedStatus) {
-        const order = await Checkout.findOne({ nimbusAwb: awb_number });
-
+const order = await Checkout.findOne({ 
+  $or: [
+    { nimbusAwb: awb_number },
+    { nimbusOrderId: req.body.order_id?.toString() }
+  ]
+});
         if (order) {
           order.orderStatus = mappedStatus;
+          if (awb_number) {
+  order.nimbusAwb = awb_number;
+  order.trackingNumber = awb_number;
+}
+if (req.body.courier_name) {
+  order.nimbusCourier = req.body.courier_name;
+}
 
           if (mappedStatus === 'delivered') {
             order.deliveredAt    = timestamp ? new Date(timestamp) : new Date();
