@@ -12,7 +12,7 @@ router.post('/auth/verify-otp', checkoutController.verifyOTP);
 // ADDRESS ROUTES (Public - Email Based)
 // ============================================
 router.post('/addresses', checkoutController.saveAddress);
-router.get('/addresses/by-email/:email', checkoutController.getAddressesByEmail);
+router.get('/addresses/by-phone/:phone', checkoutController.getAddressesByPhone);
 router.delete('/addresses/:addressId', checkoutController.deleteAddress);
 
 // ============================================
@@ -20,7 +20,7 @@ router.delete('/addresses/:addressId', checkoutController.deleteAddress);
 // ============================================
 router.post('/orders', checkoutController.placeOrder);
 router.get('/orders/:orderId', checkoutController.getOrderById);
-router.get('/orders/email/:email', checkoutController.getOrdersByEmail);
+router.get('/orders/phone/:phone', checkoutController.getOrdersByPhone);
 router.get('/orders/user/:userId', checkoutController.getOrdersByUserId);
 
 // ============================================
