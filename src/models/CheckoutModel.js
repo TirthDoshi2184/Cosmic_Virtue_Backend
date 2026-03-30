@@ -172,8 +172,8 @@ items: [{
     ref: 'User'
   },
 
-  // Email verified orders (for OTP-based checkout)
-  emailVerified: {
+  // Phone verified orders (for OTP-based checkout)
+  phoneVerified: {
     type: Boolean,
     default: false
   },
