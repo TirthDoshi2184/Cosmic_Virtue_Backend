@@ -760,13 +760,10 @@ exports.verifyOTP = async (req, res) => {
         const orderNumber = order._id.toString().slice(-8).toUpperCase();
         const nimbusData  = await createShipment({ ...order.toObject(), orderNumber });
 
-        if (nimbusData?.data?.awb_number) {
-          order.nimbusAwb     = nimbusData.data.awb_number;
-          order.nimbusCourier = nimbusData.data.courier_name;
-          order.nimbusOrderId = nimbusData.data.order_id?.toString();
-          order.trackingNumber = nimbusData.data.awb_number;
-          await order.save();
-        }
+        if (nimbusData?.data) {
+  order.nimbusOrderId = nimbusData.data.toString();
+  await order.save();
+}
       } catch (nimbusError) {
         console.error('NimbusPost failed after payment:', nimbusError.message);
         // Don't fail — payment is done, just retry shipment manually
