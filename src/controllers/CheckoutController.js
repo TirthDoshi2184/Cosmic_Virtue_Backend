@@ -789,6 +789,9 @@ exports.verifyOTP = async (req, res) => {
           }
         }
       });
+    console.log('✅ NimbusPost Success:', res.data);
+// ADD THIS:
+console.log('✅ Full structure:', JSON.stringify(res.data, null, 2));
 
     } catch (error) {
       console.error('Payment verification error:', error);
