@@ -1,4 +1,5 @@
 const express = require('express');
+const authMiddleware = require('../middleware/authMiddleware'); 
 const router = express.Router();
 const {
     createUser,
@@ -6,7 +7,9 @@ const {
     getAllUser,
     deleteUser,
     updateUser,
-    getSingleUser
+    getSingleUser,
+    getProfile,
+    updateProfile
 } = require('../controllers/UserController');
 
 /**
@@ -207,6 +210,8 @@ router.post('/login', LoginUser);
  */
 router.get('/', getAllUser);
 
+router.get('/profile', authMiddleware, getProfile);
+router.put('/profile', authMiddleware, updateProfile);
 /**
  * @swagger
  * /users/{id}:

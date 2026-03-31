@@ -166,11 +166,46 @@ const getSingleUser = async (req, res) => {
     }
 };
 
+const getProfile = async (req, res) => {
+  try {
+    const user = await UserSchema.findById(req.user._id).select('-password');
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.status(200).json({ data: user, message: 'Profile fetched successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const updateProfile = async (req, res) => {
+  try {
+    const user = await UserSchema.findById(req.user._id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const { email, phoneNumber, password, currentPassword } = req.body;
+    if (password) {
+      if (!currentPassword) return res.status(400).json({ error: 'Current password required' });
+      const isMatch = await user.comparePassword(currentPassword);
+      if (!isMatch) return res.status(401).json({ error: 'Current password is incorrect' });
+      user.password = password;
+    }
+    if (email) user.email = email;
+    if (phoneNumber) user.phoneNumber = phoneNumber;
+    const updated = await user.save();
+    const userObj = updated.toObject();
+    delete userObj.password;
+    res.status(200).json({ data: userObj, message: 'Profile updated successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+
 module.exports = {
     createUser,
     LoginUser,
     getAllUser,
     deleteUser,
     updateUser,
-    getSingleUser
+    getSingleUser,
+    getProfile,
+    updateProfile
 };
