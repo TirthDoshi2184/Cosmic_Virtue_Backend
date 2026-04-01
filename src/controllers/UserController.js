@@ -52,11 +52,11 @@ res.json({
   message: 'Login successful', 
   userId: user._id,
   token: token,  // ← Missing!
-  user: {        // ← Missing!
-    id: user._id,
-    email: user.email,
-    phoneNumber: user.phoneNumber
-  }
+  user: {
+  _id: user._id.toString(),  // ← toString() prevents any ObjectId weirdness
+  email: user.email,
+  phoneNumber: user.phoneNumber
+}
 });
   } catch (error) {
     res.status(500).json({ error: error.message });
