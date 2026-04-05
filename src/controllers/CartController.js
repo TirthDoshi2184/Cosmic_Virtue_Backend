@@ -37,7 +37,7 @@ exports.addToCart = async (req, res) => {
         quantity,
         price: product.price,           // ← Get from product
         name: product.name,              // ← Get from product
-        image: product.img,              // ← Get from product
+        image: Array.isArray(product.img) ? product.img[0] : product.img,             // ← Get from product
         size: product.dimension ? `${product.dimension.height}cm` : 'Standard', // ← Get from product
       });
     }
@@ -188,7 +188,7 @@ exports.mergeGuestCart = async (req, res) => {
           quantity: guestItem.quantity,
           price: product.price,
           name: product.name,
-          image: product.img,
+          image: Array.isArray(product.img) ? product.img[0] : product.img,
           size: guestItem.size || 'Standard'
         });
       }
