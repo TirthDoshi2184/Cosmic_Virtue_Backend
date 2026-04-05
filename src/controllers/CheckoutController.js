@@ -457,7 +457,10 @@ exports.verifyOTP = async (req, res) => {
           const nimbusData = await createShipment(orderWithNumber);
           
           if (nimbusData?.data) {
-  order.nimbusOrderId = nimbusData.data.toString();
+  order.nimbusOrderId = nimbusData.data.order_id?.toString() || nimbusData.data.toString();
+  order.nimbusAwb = nimbusData.data.awb_number || null;
+  order.nimbusCourier = nimbusData.data.courier_name || null;
+  order.trackingNumber = nimbusData.data.awb_number || null;
   order.orderStatus = 'confirmed';
   await order.save();
 }
@@ -759,9 +762,11 @@ exports.verifyOTP = async (req, res) => {
       try {
         const orderNumber = order._id.toString().slice(-8).toUpperCase();
         const nimbusData  = await createShipment({ ...order.toObject(), orderNumber });
-
-        if (nimbusData?.data) {
-  order.nimbusOrderId = nimbusData.data.toString();
+if (nimbusData?.data) {
+  order.nimbusOrderId = nimbusData.data.order_id?.toString() || nimbusData.data.toString();
+  order.nimbusAwb = nimbusData.data.awb_number || null;
+  order.nimbusCourier = nimbusData.data.courier_name || null;
+  order.trackingNumber = nimbusData.data.awb_number || null;
   await order.save();
 }
       } catch (nimbusError) {

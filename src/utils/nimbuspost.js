@@ -132,13 +132,16 @@ const createShipment = async (order) => {
 const trackShipment = async (awbNumber) => {
   const token = await getNimbusToken();
 
-  const res = await axios.get(`${BASE_URL}/courier/track-awb/${awbNumber}`, {
-    headers: { Authorization: `Bearer ${token}` }
+  const res = await axios.get(`${BASE_URL}/shipments/track_awb/${awbNumber}`, {
+    headers: {
+      'NP-API-KEY': process.env.NIMBUS_API_KEY,
+      'Authorization': `Bearer ${token}`
+    }
   });
 
+  console.log('Track response:', res.data);
   return res.data;
 };
-
 // Cancel a shipment by AWB
 const cancelShipment = async (awbNumber) => {
   const token = await getNimbusToken();
@@ -160,11 +163,46 @@ const checkWalletBalance = async () => {
   return res.data;
 };
 
+// Ship by Order ID (books shipment + assigns AWB)
+const shipByOrderId = async (nimbusOrderId) => {
+  const form = new FormData();
+  form.append('id', nimbusOrderId);
+
+  const res = await axios.post('https://ship.nimbuspost.com/api/orders/ship', form, {
+    headers: {
+      'NP-API-KEY': process.env.NIMBUS_API_KEY,
+      ...form.getHeaders()
+    }
+  });
+
+  console.log('Ship by order ID response:', JSON.stringify(res.data));
+  return res.data;
+};
+
+// Generate shipping label by AWB
+const generateLabel = async (awb) => {
+  const form = new FormData();
+  form.append('ids[]', awb);
+
+  const res = await axios.post(`${BASE_URL}/shipments/label`, form, {
+    headers: {
+      'NP-API-KEY': process.env.NIMBUS_API_KEY,
+      ...form.getHeaders()
+    }
+  });
+
+  console.log('Label response:', JSON.stringify(res.data));
+  return res.data;
+};
+
+
 module.exports = {
   getNimbusToken,
   checkServiceability,
   createShipment,
   trackShipment,
   cancelShipment,
-  checkWalletBalance   // ADD THIS
+  checkWalletBalance,   // ADD THIS
+  shipByOrderId,
+  generateLabel
 };

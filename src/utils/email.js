@@ -243,7 +243,7 @@ Thank you for shopping with us!`;
           <p>Your order has been placed successfully and is being processed.</p>
           
           <center>
-            <a href="${process.env.FRONTEND_URL || 'https://yourstore.com'}/orders/${orderNumber}" class="button">
+            <a href="https://cosmicvirtues.odrtrk.live//track" class="button">
               Track Your Order
             </a>
           </center>
@@ -257,8 +257,8 @@ Thank you for shopping with us!`;
         </div>
         
         <div class="footer">
-          <p>Need help? Contact us at support@yourstore.com</p>
-          <p>&copy; ${new Date().getFullYear()} Your Store. All rights reserved.</p>
+          <p>Need help? Contact us at cosmicvirtue07@gmail.com</p>
+          <p>&copy; ${new Date().getFullYear()} Cosmic Virtue. All rights reserved.</p>
         </div>
       </div>
     </body>
@@ -319,7 +319,7 @@ Order Number: #${orderNumber}
 ${trackingNumber ? `Tracking Number: ${trackingNumber}\n` : ''}
 ${message}
 
-Track your order: ${process.env.FRONTEND_URL || 'https://yourstore.com'}/orders/${orderNumber}`;
+Track your order: 'https://cosmicvirtues.odrtrk.live//track'`;
 
   const html = `
     <!DOCTYPE html>
