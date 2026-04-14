@@ -34,25 +34,24 @@ router.post('/payment/create-order',  checkoutController.createPaymentOrder);
 router.post('/payment/verify',        checkoutController.verifyAndConfirmPayment);
 
 // ADD at the bottom — no auth needed, NimbusPost calls this
-router.post('/webhooks/nimbuspost', checkoutController.nimbusWebhook);
-
+router.post('/webhooks/shiprocket', checkoutController.shiprocketWebhook);
 // ADD this new route (place it under ORDER ROUTES)
 router.get('/orders/:orderId/track', async (req, res) => {
   try {
-    const { trackShipment } = require('../utils/nimbuspost');
+    const { trackShipment } = require('../utils/shiprocket');
     const Checkout = require('../models/CheckoutModel');
 
     const order = await Checkout.findById(req.params.orderId);
-    if (!order || !order.nimbusAwb) {
+    if (!order || !order.srAwb) {
       return res.status(404).json({ success: false, message: 'Tracking not available yet' });
-    }
+    } 
 
-    const trackingData = await trackShipment(order.nimbusAwb);
+    const trackingData = await trackShipment(order.srOrderId);
 
     res.status(200).json({
       success:    true,
-      awb:        order.nimbusAwb,
-      courier:    order.nimbusCourier,
+      awb:        order.srAwb,
+      courier:    order.srCourier,
       tracking:   trackingData
     });
   } catch (err) {
@@ -60,12 +59,6 @@ router.get('/orders/:orderId/track', async (req, res) => {
   }
 });
 
-// Admin use only — add auth middleware before going live
-router.get('/admin/wallet-balance', async (req, res) => {
-  const { checkWalletBalance } = require('../utils/nimbuspost');
-  const balance = await checkWalletBalance();
-  res.json({ success: true, data: balance });
-});
 
 
 router.get('/serviceability/:pincode', (req, res) => {

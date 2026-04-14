@@ -2,7 +2,8 @@
   const Address = require('../models/AddressModel');
   // const OTP = require('../models/OtpModel');
   // ADD this line after your existing requires
-  const { createShipment, trackShipment, cancelShipment,checkServiceability } = require('../utils/nimbuspost');
+  // const { createShipment, trackShipment, cancelShipment,checkServiceability } = require('../utils/nimbuspost');
+  const { createShipment, trackShipment, cancelShipment, checkServiceability } = require('../utils/shiprocket');
   const { createRazorpayOrder, verifyPaymentSignature } = require('../utils/razorpay');
   const Cart = require('../models/CartModel');
   const { sendEmai, sendOrderConfirmationEmail, sendOrderConfirmationSMS,sendEmailSafe } = require('../utils/email');
@@ -456,11 +457,11 @@ exports.verifyOTP = async (req, res) => {
           const orderWithNumber = { ...order.toObject(), orderNumber };
           const nimbusData = await createShipment(orderWithNumber);
           
-          if (nimbusData?.data) {
-  order.nimbusOrderId = nimbusData.data.order_id?.toString() || nimbusData.data.toString();
-  order.nimbusAwb = nimbusData.data.awb_number || null;
-  order.nimbusCourier = nimbusData.data.courier_name || null;
-  order.trackingNumber = nimbusData.data.awb_number || null;
+          if (nimbusData?.payload) {
+order.srOrderId = nimbusData.payload.order_id?.toString() || null;
+order.srAwb = nimbusData.payload.awb_code || null;
+order.srCourier = nimbusData.payload.courier_name || null;
+order.trackingNumber = nimbusData.payload.awb_code || null;
   order.orderStatus = 'confirmed';
   await order.save();
 }
@@ -478,10 +479,7 @@ exports.verifyOTP = async (req, res) => {
           orderStatus: order.orderStatus,
           paymentMethod: order.paymentMethod,
           total: order.pricing.total,
-          tracking: {
-            awb: order.nimbusAwb || null,
-            courier: order.nimbusCourier || null
-          }
+       tracking: { awb: order.srAwb || null, courier: order.srCourier || null }
         }
       });
 
@@ -634,9 +632,9 @@ exports.verifyOTP = async (req, res) => {
       await order.save();
 
       // ADD: Cancel on NimbusPost if AWB exists
-  if (order.nimbusAwb) {
+  if (order.srOrderId) {
     try {
-      await cancelShipment(order.nimbusAwb);
+      await cancelShipment(order.srOrderId);
     } catch (err) {
       console.error('NimbusPost cancel failed:', err.message);
     }
@@ -762,11 +760,12 @@ exports.verifyOTP = async (req, res) => {
       try {
         const orderNumber = order._id.toString().slice(-8).toUpperCase();
         const nimbusData  = await createShipment({ ...order.toObject(), orderNumber });
-if (nimbusData?.data) {
-  order.nimbusOrderId = nimbusData.data.order_id?.toString() || nimbusData.data.toString();
-  order.nimbusAwb = nimbusData.data.awb_number || null;
-  order.nimbusCourier = nimbusData.data.courier_name || null;
-  order.trackingNumber = nimbusData.data.awb_number || null;
+if (nimbusData?.payload) {
+order.srOrderId = nimbusData.payload.order_id?.toString() || null;
+order.srAwb = nimbusData.payload.awb_code || null;
+order.srCourier = nimbusData.payload.courier_name || null;
+order.trackingNumber = nimbusData.payload.awb_code || null;
+  order.orderStatus = 'confirmed';
   await order.save();
 }
       } catch (nimbusError) {
@@ -782,10 +781,7 @@ if (nimbusData?.data) {
           orderNumber:   order._id.toString().slice(-8).toUpperCase(),
           paymentStatus: order.paymentStatus,
           orderStatus:   order.orderStatus,
-          tracking: {
-            awb:     order.nimbusAwb     || null,
-            courier: order.nimbusCourier || null
-          }
+       tracking: { awb: order.srAwb || null, courier: order.srCourier || null }
         }
       });
 
@@ -876,8 +872,7 @@ if (req.body.courier_name) {
       res.status(200).json({ success: true }); // still 200 to prevent retries
     }
   };
-
-  exports.checkServiceability = async (req, res) => {
+exports.checkServiceability = async (req, res) => {
   try {
     const { pincode } = req.params;
 
@@ -885,35 +880,87 @@ if (req.body.courier_name) {
       return res.json({ success: false, serviceable: false, shippingCharge: 0 });
     }
 
-    // Gujarat pincodes: 360000–396999
+    // Simple local fallback while Shiprocket serviceability is checked
     const pincodeNum = parseInt(pincode);
     const isGujarat = pincodeNum >= 360000 && pincodeNum <= 396999;
     const shippingCharge = isGujarat ? 90 : 120;
 
-    // Check if NimbusPost delivers to this pincode using couriers list
-    // If order creation fails for this pincode, we catch it then
-    // For now, block known unserviceable pincode ranges
-    const unserviceablePrefixes = ['201209', '744', '793', '795', '796', '797', '798']; // remote/NE areas
+    // Block known unserviceable remote areas
+    const unserviceablePrefixes = ['744', '793', '795', '796', '797', '798'];
     const isUnserviceable = unserviceablePrefixes.some(prefix => pincode.startsWith(prefix));
 
     if (isUnserviceable) {
-      return res.json({
-        success: true,
-        serviceable: false,
-        shippingCharge: 0,
-        message: 'Delivery not available at this pincode'
-      });
+      return res.json({ success: true, serviceable: false, shippingCharge: 0 });
     }
 
-    res.json({
-      success: true,
-      serviceable: true,
-      shippingCharge,
-      zone: isGujarat ? 'local' : 'national'
-    });
+    // Optional: call Shiprocket's serviceability API for real-time check
+    // Uncomment if you want live courier availability check:
+    // const srData = await checkServiceability(pincode, false);
+    // const available = srData?.data?.available_courier_companies?.length > 0;
+    // if (!available) return res.json({ success: true, serviceable: false, shippingCharge: 0 });
 
+    res.json({ success: true, serviceable: true, shippingCharge, zone: isGujarat ? 'local' : 'national' });
   } catch (err) {
     console.error('Serviceability error:', err.message);
     res.json({ success: true, serviceable: true, shippingCharge: 90 });
+  }
+};
+
+exports.shiprocketWebhook = async (req, res) => {
+  try {
+    console.log('Shiprocket Webhook:', JSON.stringify(req.body, null, 2));
+
+    const { awb, current_status, order_id } = req.body;
+
+    const statusMap = {
+      'Pickup Scheduled': 'confirmed',
+      'Picked Up': 'processing',
+      'In Transit': 'shipped',
+      'Out For Delivery': 'shipped',
+      'Delivered': 'delivered',
+      'Cancelled': 'cancelled',
+      'RTO Initiated': 'cancelled',
+      'RTO Delivered': 'cancelled',
+      'Undelivered': 'shipped',
+    };
+
+    const mappedStatus = statusMap[current_status];
+
+    if (mappedStatus && (awb || order_id)) {
+      const order = await Checkout.findOne({
+        $or: [
+          { srAwb: awb },
+          { srOrderId: order_id?.toString() }
+        ]
+      });
+
+      if (order) {
+        order.orderStatus = mappedStatus;
+        if (awb) { order.srAwb = awb; order.trackingNumber = awb; }
+
+        if (mappedStatus === 'delivered') {
+          order.deliveredAt = new Date();
+          order.paymentStatus = 'completed';
+        }
+
+        await order.save();
+
+        if (mappedStatus === 'delivered') {
+          try {
+            const orderNumber = order._id.toString().slice(-8).toUpperCase();
+            await sendEmailSafe(
+              order.contactInfo.email,
+              `Your Order #${orderNumber} has been Delivered! 🎉`,
+              `Hi ${order.contactInfo.firstName}, your order has been delivered. Thank you!`
+            );
+          } catch (e) { console.error('Delivery email failed:', e); }
+        }
+      }
+    }
+
+    res.status(200).json({ success: true });
+  } catch (error) {
+    console.error('Webhook error:', error);
+    res.status(200).json({ success: true }); // always 200 to prevent retries
   }
 };

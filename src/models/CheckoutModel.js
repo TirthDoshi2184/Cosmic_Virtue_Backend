@@ -191,15 +191,9 @@ items: [{
     type: Date
   },
 
-  nimbusAwb: {
-  type: String         // AWB number from NimbusPost
-},
-nimbusCourier: {
-  type: String         // Courier name assigned by NimbusPost
-},
-nimbusOrderId: {
-  type: String         // NimbusPost's internal order ID
-},
+srAwb: { type: String },
+srCourier: { type: String },
+srOrderId: { type: String },
 
   // Timestamps
   orderDate: {
