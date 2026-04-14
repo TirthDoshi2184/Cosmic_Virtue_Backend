@@ -456,12 +456,13 @@ exports.verifyOTP = async (req, res) => {
         try {
           const orderWithNumber = { ...order.toObject(), orderNumber };
           const nimbusData = await createShipment(orderWithNumber);
+          console.log('Shiprocket raw response:', JSON.stringify(nimbusData, null, 2));
           
-          if (nimbusData?.payload) {
-order.srOrderId = nimbusData.payload.order_id?.toString() || null;
-order.srAwb = nimbusData.payload.awb_code || null;
-order.srCourier = nimbusData.payload.courier_name || null;
-order.trackingNumber = nimbusData.payload.awb_code || null;
+ if (nimbusData) {
+  order.srOrderId = nimbusData.order_id?.toString() || null;
+  order.srAwb = nimbusData.awb_code || null;
+  order.srCourier = nimbusData.courier_name || null;
+  order.trackingNumber = nimbusData.awb_code || null;
   order.orderStatus = 'confirmed';
   await order.save();
 }
@@ -474,6 +475,7 @@ order.trackingNumber = nimbusData.payload.awb_code || null;
       res.status(201).json({
         success: true,
         message: 'Order placed successfully',
+        
         data: {
           orderId: order._id,
           orderNumber: orderNumber,
@@ -763,11 +765,11 @@ order.trackingNumber = nimbusData.payload.awb_code || null;
       try {
         const orderNumber = order._id.toString().slice(-8).toUpperCase();
         const srData  = await createShipment({ ...order.toObject(), orderNumber });
-if (srData?.payload) {
-order.srOrderId = srData.payload.order_id?.toString() || null;
-order.srAwb = srData.payload.awb_code || null;
-order.srCourier = srData.payload.courier_name || null;
-order.trackingNumber = srData.payload.awb_code || null;
+if (nimbusData) {
+  order.srOrderId = nimbusData.order_id?.toString() || null;
+  order.srAwb = nimbusData.awb_code || null;
+  order.srCourier = nimbusData.courier_name || null;
+  order.trackingNumber = nimbusData.awb_code || null;
   order.orderStatus = 'confirmed';
   await order.save();
 }
