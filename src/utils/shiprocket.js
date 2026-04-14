@@ -44,7 +44,7 @@ const checkServiceability = async (deliveryPincode, isCOD = false) => {
 // Create order + shipment in Shiprocket
 const createShipment = async (order) => {
   const token = await getShiprocketToken();
-
+console.log('PICKUP LOCATION:', process.env.SHIPROCKET_PICKUP_LOCATION); // add this
   console.log(`Creating Shiprocket shipment for order ${order.orderNumber}`);
 
   const isCOD = order.paymentMethod === 'cod';
