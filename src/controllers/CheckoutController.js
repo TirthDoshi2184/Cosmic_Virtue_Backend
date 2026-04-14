@@ -765,11 +765,11 @@ exports.verifyOTP = async (req, res) => {
       try {
         const orderNumber = order._id.toString().slice(-8).toUpperCase();
         const srData  = await createShipment({ ...order.toObject(), orderNumber });
-if (nimbusData) {
-  order.srOrderId = nimbusData.order_id?.toString() || null;
-  order.srAwb = nimbusData.awb_code || null;
-  order.srCourier = nimbusData.courier_name || null;
-  order.trackingNumber = nimbusData.awb_code || null;
+if (srData) {
+  order.srOrderId = srData.order_id?.toString() || null;
+  order.srAwb = srData.awb_code || null;
+  order.srCourier = srData.courier_name || null;
+  order.trackingNumber = srData.awb_code || null;
   order.orderStatus = 'confirmed';
   await order.save();
 }
