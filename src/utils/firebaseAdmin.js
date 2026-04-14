@@ -10,11 +10,10 @@ if (!admin.apps.length) {
   });
 }
 
-exports.verifyFirebaseToken = async (token) => {
+exports.verifyFirebaseToken = async (token) =>
+   {
   const decoded = await admin.auth().verifyIdToken(token);
   return decoded;
 };
 
-if (window.location.hostname === 'localhost') {
-  auth.settings.appVerificationDisabledForTesting = true;
-}
+
