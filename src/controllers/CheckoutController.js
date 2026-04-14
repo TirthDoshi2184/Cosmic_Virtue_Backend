@@ -466,7 +466,8 @@ order.trackingNumber = nimbusData.payload.awb_code || null;
   await order.save();
 }
         } catch (nimbusError) {
-          console.error('NimbusPost COD shipment failed:', nimbusError.message);
+          // console.error('NimbusPost COD shipment failed:', nimbusError.message);
+          console.error('Shiprocket COD shipment failed:', nimbusError.message);
         }
       }
 
@@ -636,8 +637,10 @@ order.trackingNumber = nimbusData.payload.awb_code || null;
     try {
       await cancelShipment(order.srOrderId);
     } catch (err) {
-      console.error('NimbusPost cancel failed:', err.message);
+      // console.error('NimbusPost cancel failed:', err.message);
+      console.error('Shiprocket cancel failed:', err.message);
     }
+
   }
 
       // Send cancellation SMS
@@ -759,18 +762,19 @@ order.trackingNumber = nimbusData.payload.awb_code || null;
       // Step 3: Now create NimbusPost shipment (only after payment confirmed)
       try {
         const orderNumber = order._id.toString().slice(-8).toUpperCase();
-        const nimbusData  = await createShipment({ ...order.toObject(), orderNumber });
-if (nimbusData?.payload) {
-order.srOrderId = nimbusData.payload.order_id?.toString() || null;
-order.srAwb = nimbusData.payload.awb_code || null;
-order.srCourier = nimbusData.payload.courier_name || null;
-order.trackingNumber = nimbusData.payload.awb_code || null;
+        const srData  = await createShipment({ ...order.toObject(), orderNumber });
+if (srData?.payload) {
+order.srOrderId = srData.payload.order_id?.toString() || null;
+order.srAwb = srData.payload.awb_code || null;
+order.srCourier = srData.payload.courier_name || null;
+order.trackingNumber = srData.payload.awb_code || null;
   order.orderStatus = 'confirmed';
   await order.save();
 }
       } catch (nimbusError) {
-        console.error('NimbusPost failed after payment:', nimbusError.message);
+        // console.error('NimbusPost failed after payment:', nimbusError.message);
         // Don't fail — payment is done, just retry shipment manually
+        console.error('Shiprocket failed after payment:', nimbusError.message);
       }
 
       res.status(200).json({
@@ -796,82 +800,82 @@ order.trackingNumber = nimbusData.payload.awb_code || null;
   };
 
 
-  exports.nimbusWebhook = async (req, res) => {
-    try {
-      console.log('Full webhook body:', JSON.stringify(req.body, null, 2));
-      const { awb_number, current_status, location, timestamp } = req.body;
+//   exports.nimbusWebhook = async (req, res) => {
+//     try {
+//       console.log('Full webhook body:', JSON.stringify(req.body, null, 2));
+//       const { awb_number, current_status, location, timestamp } = req.body;
 
-      console.log('NimbusPost Webhook:', { awb_number, current_status });
+//       console.log('NimbusPost Webhook:', { awb_number, current_status });
 
-      // Map NimbusPost statuses to your order statuses
-      const statusMap = {
-        'Booked':              'confirmed',
-        'In Transit':          'shipped',
-        'Out for Delivery':    'shipped',
-        'Delivered':           'delivered',
-        'Failed Delivery':     'shipped',     // still active, retry
-        'RTO Initiated':       'cancelled',
-        'RTO Delivered':       'cancelled',
-        'Cancelled':           'cancelled',
-        'Pickup Pending':      'confirmed',
-        'Pickup Scheduled':    'confirmed',
-        'Picked Up':           'processing'
-      };
+//       // Map NimbusPost statuses to your order statuses
+//       const statusMap = {
+//         'Booked':              'confirmed',
+//         'In Transit':          'shipped',
+//         'Out for Delivery':    'shipped',
+//         'Delivered':           'delivered',
+//         'Failed Delivery':     'shipped',     // still active, retry
+//         'RTO Initiated':       'cancelled',
+//         'RTO Delivered':       'cancelled',
+//         'Cancelled':           'cancelled',
+//         'Pickup Pending':      'confirmed',
+//         'Pickup Scheduled':    'confirmed',
+//         'Picked Up':           'processing'
+//       };
 
-      if (!awb_number) {
-        return res.status(200).json({ success: true }); // always 200 to NimbusPost
-      }
+//       if (!awb_number) {
+//         return res.status(200).json({ success: true }); // always 200 to NimbusPost
+//       }
 
-      const mappedStatus = statusMap[current_status];
+//       const mappedStatus = statusMap[current_status];
 
-      if (mappedStatus) {
-const order = await Checkout.findOne({ 
-  $or: [
-    { nimbusAwb: awb_number },
-    { nimbusOrderId: req.body.order_id?.toString() }
-  ]
-});
-        if (order) {
-          order.orderStatus = mappedStatus;
-          if (awb_number) {
-  order.nimbusAwb = awb_number;
-  order.trackingNumber = awb_number;
-}
-if (req.body.courier_name) {
-  order.nimbusCourier = req.body.courier_name;
-}
+//       if (mappedStatus) {
+// const order = await Checkout.findOne({ 
+//   $or: [
+//     { nimbusAwb: awb_number },
+//     { nimbusOrderId: req.body.order_id?.toString() }
+//   ]
+// });
+//         if (order) {
+//           order.orderStatus = mappedStatus;
+//           if (awb_number) {
+//   order.nimbusAwb = awb_number;
+//   order.trackingNumber = awb_number;
+// }
+// if (req.body.courier_name) {
+//   order.nimbusCourier = req.body.courier_name;
+// }
 
-          if (mappedStatus === 'delivered') {
-            order.deliveredAt    = timestamp ? new Date(timestamp) : new Date();
-            order.paymentStatus  = 'completed'; // auto-complete COD on delivery
-          }
+//           if (mappedStatus === 'delivered') {
+//             order.deliveredAt    = timestamp ? new Date(timestamp) : new Date();
+//             order.paymentStatus  = 'completed'; // auto-complete COD on delivery
+//           }
 
-          await order.save();
+//           await order.save();
 
-          // Send delivery email to customer
-          if (mappedStatus === 'delivered') {
-            try {
-              const orderNumber = order._id.toString().slice(-8).toUpperCase();
-              await sendEmailSafe(
-                order.contactInfo.email,
-                `Your Order #${orderNumber} has been Delivered! 🎉`,
-                `Hi ${order.contactInfo.firstName}, your order has been delivered. Thank you for shopping with us!`
-              );
-            } catch (emailErr) {
-              console.error('Delivery email failed:', emailErr);
-            }
-          }
-        }
-      }
+//           // Send delivery email to customer
+//           if (mappedStatus === 'delivered') {
+//             try {
+//               const orderNumber = order._id.toString().slice(-8).toUpperCase();
+//               await sendEmailSafe(
+//                 order.contactInfo.email,
+//                 `Your Order #${orderNumber} has been Delivered! 🎉`,
+//                 `Hi ${order.contactInfo.firstName}, your order has been delivered. Thank you for shopping with us!`
+//               );
+//             } catch (emailErr) {
+//               console.error('Delivery email failed:', emailErr);
+//             }
+//           }
+//         }
+//       }
 
-      // Always respond 200 — NimbusPost retries if it gets anything else
-      res.status(200).json({ success: true });
+//       // Always respond 200 — NimbusPost retries if it gets anything else
+//       res.status(200).json({ success: true });
 
-    } catch (error) {
-      console.error('Webhook error:', error);
-      res.status(200).json({ success: true }); // still 200 to prevent retries
-    }
-  };
+//     } catch (error) {
+//       console.error('Webhook error:', error);
+//       res.status(200).json({ success: true }); // still 200 to prevent retries
+//     }
+//   };
 exports.checkServiceability = async (req, res) => {
   try {
     const { pincode } = req.params;
