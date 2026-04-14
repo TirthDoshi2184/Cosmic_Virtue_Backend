@@ -58,17 +58,17 @@ console.log('PICKUP LOCATION:', process.env.SHIPROCKET_PICKUP_LOCATION); // add 
     billing_address: order.shippingAddress.address,
     billing_address_2: order.shippingAddress.apartment || '',
     billing_city: order.shippingAddress.city,
-    billing_pincode: order.shippingAddress.pincode,
+    billing_pincode: parseInt(order.shippingAddress.pincode),
     billing_state: order.shippingAddress.state,
     billing_country: 'India',
     billing_email: order.contactInfo.email,
-    billing_phone: order.contactInfo.phone,
+    billing_phone: parseInt(order.contactInfo.phone),
 
     // Shipping same as billing unless different
     shipping_is_billing: true,
 
     payment_method: isCOD ? 'COD' : 'Prepaid',
-    sub_total: order.pricing.subtotal,
+    sub_total: Math.round(order.pricing.subtotal),
     length: 15,
     breadth: 10,
     height: 10,
