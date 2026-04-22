@@ -29,6 +29,7 @@ jobs:
             -x ".github/*" \
             -x "*.env*" \
             -x "*.md"
+            -x "node_modules/*"
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
