@@ -1,6 +1,58 @@
 const UserSchema = require('../models/UserModel');
 const jwt = require('jsonwebtoken');
 
+const { verifyFirebaseToken } = require('../utils/firebaseAdmin'); // already used in CheckoutController
+
+const LoginWithPhone = async (req, res) => {
+  try {
+    const { phone, firebaseToken } = req.body;
+
+    if (!phone || !firebaseToken) {
+      return res.status(400).json({ error: 'Phone and token required' });
+    }
+
+    // Verify Firebase token
+    const decoded = await verifyFirebaseToken(firebaseToken);
+    const tokenPhone = decoded.phone_number; // e.g. '+919876543210'
+    const expectedPhone = `+91${phone}`;
+
+    if (tokenPhone !== expectedPhone) {
+      return res.status(400).json({ error: 'Phone number mismatch' });
+    }
+
+    // Find or create user by phone
+    let user = await UserSchema.findOne({ phoneNumber: Number(phone) });
+
+    if (!user) {
+      // Auto-create account for phone-verified users
+      user = new UserSchema({
+        phoneNumber: Number(phone),
+        email: `${phone}@phone.placeholder`, // placeholder, not used for login
+        password: null,
+      });
+      await user.save();
+    }
+
+    const token = jwt.sign(
+      { userId: user._id },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.json({
+      message: 'Login successful',
+      token,
+      user: {
+        _id: user._id.toString(),
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+      }
+    });
+
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
 // Create new user
 const createUser = async (req, res) => {
   try {
@@ -207,5 +259,6 @@ module.exports = {
     updateUser,
     getSingleUser,
     getProfile,
-    updateProfile
+    updateProfile,
+    LoginWithPhone
 };

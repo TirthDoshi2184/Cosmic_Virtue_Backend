@@ -9,28 +9,24 @@ const UserSchema = new Schema({
     unique: true,
     trim: true,
   },
-  password: {
-    type: String,
-    required: true,
-  },
   phoneNumber: {
-    type: Number,
-    required: true
-  }
+  type: Number,
+  required: false,  // CHANGE: was true
+  sparse: true,     // ADD: allows multiple null values with unique index
+  unique: true      // ADD: so phone lookups are fast and unique
+},
+password: {
+  type: String,
+  required: false,  // CHANGE: was true — phone users have no password
+},
 }, { timestamps: true });
 
 // Hash password before saving (Mongoose 6+ version)
 UserSchema.pre('save', async function() {
-  // Only hash if password is modified or new
-  if (!this.isModified('password')) {
-    return;
-  }
-  
-  // Generate salt and hash password
+  if (!this.isModified('password') || !this.password) return; // ADD: !this.password guard
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
 });
-
 // Method to compare passwords during login
 UserSchema.methods.comparePassword = async function(candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);

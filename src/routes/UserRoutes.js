@@ -9,7 +9,8 @@ const {
     updateUser,
     getSingleUser,
     getProfile,
-    updateProfile
+    updateProfile,
+    LoginWithPhone
 } = require('../controllers/UserController');
 
 /**
@@ -138,6 +139,8 @@ const {
  *               $ref: '#/components/schemas/Error'
  */
 router.post('/register', createUser);
+
+router.post('/login/phone', LoginWithPhone);
 
 /**
  * @swagger
