@@ -11,10 +11,10 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '24'
           cache: 'npm'
@@ -31,7 +31,7 @@ jobs:
             -x "*.md"
 
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v2
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -45,7 +45,7 @@ jobs:
         run: |
           aws elasticbeanstalk create-application-version \
             --application-name "${{ secrets.EB_APP_NAME }}" \
-            --version-label "ver-${{ github.sha }}" \
+            --version-label "ver-${{ github.sha }}-${{ github.run_attempt }}" \
             --source-bundle S3Bucket="${{ secrets.EB_S3_BUCKET }}",S3Key="deploys/deploy-${{ github.sha }}.zip" \
             --region ${{ secrets.AWS_REGION }}
 
@@ -54,7 +54,7 @@ jobs:
           aws elasticbeanstalk update-environment \
             --application-name "${{ secrets.EB_APP_NAME }}" \
             --environment-name "${{ secrets.EB_ENV_NAME }}" \
-            --version-label "ver-${{ github.sha }}" \
+            --version-label "ver-${{ github.sha }}-${{ github.run_attempt }}" \
             --region ${{ secrets.AWS_REGION }}
 
       - name: Wait for Deployment
