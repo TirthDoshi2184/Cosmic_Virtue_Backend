@@ -28,7 +28,7 @@ jobs:
             -x "*.git*" \
             -x ".github/*" \
             -x "*.env*" \
-            -x "*.md"
+            -x "*.md" \
             -x "node_modules/*"
 
       - name: Configure AWS Credentials
