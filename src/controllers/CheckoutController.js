@@ -410,35 +410,20 @@ exports.verifyOTP = async (req, res) => {
         paymentStatus: paymentMethod === 'cod' ? 'pending' : 'pending'
       });
 
-      // If user is logged in, clear their cart from database
-      if (userId) {
-        try {
-          await Cart.findOneAndUpdate(
-            { userId },
-            { $set: { items: [] } }
-          );
-        } catch (cartError) {
-          console.error('Error clearing cart:', cartError);
-          // Continue even if cart clearing fails
-        }
-      }
+    // Generate order number
+const orderNumber = order._id.toString().slice(-8).toUpperCase();
 
-      // Generate order number
-      // Generate order number
-  const orderNumber = order._id.toString().slice(-8).toUpperCase();
-
-      // Clear cart if logged in
-      if (userId) {
-        try {
-          await Cart.findOneAndUpdate(
-            { userId },
-            { $set: { items: [] } }
-          );
-        } catch (cartError) {
-          console.error('Error clearing cart:', cartError);
-        }
-      }
-
+// Clear cart ONLY for COD — online cart is cleared after payment verification
+if (userId && paymentMethod === 'cod') {
+  try {
+    await Cart.findOneAndUpdate(
+      { userId },
+      { $set: { items: [] } }
+    );
+  } catch (cartError) {
+    console.error('Error clearing cart:', cartError);
+  }
+}
       // Send order confirmation email
       try {
         await sendOrderConfirmationEmail(
@@ -452,39 +437,35 @@ exports.verifyOTP = async (req, res) => {
       }
 
       // Create shipment ONLY for COD (online payment creates shipment after verification)
-      if (paymentMethod === 'cod') {
-        try {
-          const orderWithNumber = { ...order.toObject(), orderNumber };
-          const nimbusData = await createShipment(orderWithNumber);
-          console.log('Shiprocket raw response:', JSON.stringify(nimbusData, null, 2));
-          
- if (nimbusData) {
-  order.srOrderId = nimbusData.order_id?.toString() || null;
-  order.srAwb = nimbusData.awb_code || null;
-  order.srCourier = nimbusData.courier_name || null;
-  order.trackingNumber = nimbusData.awb_code || null;
+     // COD: mark as confirmed, but do NOT push to Shiprocket here.
+// Shiprocket is called via confirmCODShipment after the response is sent.
+if (paymentMethod === 'cod') {
   order.orderStatus = 'confirmed';
+  order.expiresAt = undefined;
   await order.save();
 }
-        } catch (nimbusError) {
-          // console.error('NimbusPost COD shipment failed:', nimbusError.message);
-          console.error('Shiprocket COD shipment failed:', nimbusError.message);
-        }
-      }
 
-      res.status(201).json({
-        success: true,
-        message: 'Order placed successfully',
-        
-        data: {
-          orderId: order._id,
-          orderNumber: orderNumber,
-          orderStatus: order.orderStatus,
-          paymentMethod: order.paymentMethod,
-          total: order.pricing.total,
-       tracking: { awb: order.srAwb || null, courier: order.srCourier || null }
-        }
-      });
+
+const responsePayload = {
+  success: true,
+  message: 'Order placed successfully',
+  data: {
+    orderId:     order._id,
+    orderNumber: orderNumber,
+    orderStatus: order.orderStatus,
+    paymentMethod: order.paymentMethod,
+    total:       order.pricing.total,
+    tracking:    { awb: order.srAwb || null, courier: order.srCourier || null }
+  }
+};
+
+res.status(201).json(responsePayload);
+
+// Push to Shiprocket AFTER response — failure here won't affect the customer
+if (paymentMethod === 'cod') {
+  // Fire and forget — deliberately not awaited
+  exports.confirmCODShipment(order._id, orderNumber);
+}
 
     } catch (error) {
       console.error('Error placing order:', error);
@@ -495,7 +476,31 @@ exports.verifyOTP = async (req, res) => {
       });
     }
   };
-  // Get Order by ID
+
+
+  // ============================================
+// CONFIRM COD SHIPMENT (called after order response)
+// ============================================
+exports.confirmCODShipment = async (orderId, orderNumber) => {
+  // Small delay to ensure the order document is fully committed
+  await new Promise(resolve => setTimeout(resolve, 500));
+  
+  try {
+    const order = await Checkout.findById(orderId);
+    if (!order || order.paymentMethod !== 'cod') return;
+
+    const srData = await createShipment({ ...order.toObject(), orderNumber });
+    if (srData) {
+      order.srOrderId      = srData.order_id?.toString() || null;
+      order.srAwb          = srData.awb_code || null;
+      order.srCourier      = srData.courier_name || null;
+      order.trackingNumber = srData.awb_code || null;
+      await order.save();
+    }
+  } catch (err) {
+    console.error('Shiprocket COD shipment failed (async):', err.message);
+  }
+};  // Get Order by ID
   exports.getOrderById = async (req, res) => {
     try {
       const { orderId } = req.params;
@@ -715,91 +720,114 @@ exports.verifyOTP = async (req, res) => {
   // RAZORPAY - VERIFY PAYMENT & CONFIRM ORDER
   // ============================================
   exports.verifyAndConfirmPayment = async (req, res) => {
-    try {
-      const {
-        razorpay_order_id,
-        razorpay_payment_id,
-        razorpay_signature,
-        orderId              // your MongoDB order _id
-      } = req.body;
+  try {
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      orderId
+    } = req.body;
 
-      // Step 1: Verify signature
-      const isValid = verifyPaymentSignature(
-        razorpay_order_id,
-        razorpay_payment_id,
-        razorpay_signature
-      );
-
-      if (!isValid) {
-        // Mark order as payment failed
-        await Checkout.findByIdAndUpdate(orderId, {
-          paymentStatus: 'failed',
-          orderStatus:   'pending'
-        });
-
-        return res.status(400).json({
-          success: false,
-          message: 'Payment verification failed. Please contact support.'
-        });
-      }
-
-      // Step 2: Update order with payment details
-      const order = await Checkout.findByIdAndUpdate(
-        orderId,
-        {
-          paymentStatus: 'completed',
-          transactionId: razorpay_payment_id,
-          orderStatus:   'confirmed'
-        },
-        { new: true }
-      );
-
-      if (!order) {
-        return res.status(404).json({
-          success: false,
-          message: 'Order not found'
-        });
-      }
-
-      // Step 3: Now create NimbusPost shipment (only after payment confirmed)
-      try {
-        const orderNumber = order._id.toString().slice(-8).toUpperCase();
-        const srData  = await createShipment({ ...order.toObject(), orderNumber });
-if (srData) {
-  order.srOrderId = srData.order_id?.toString() || null;
-  order.srAwb = srData.awb_code || null;
-  order.srCourier = srData.courier_name || null;
-  order.trackingNumber = srData.awb_code || null;
-  order.orderStatus = 'confirmed';
-  await order.save();
-}
-      } catch (nimbusError) {
-        // console.error('NimbusPost failed after payment:', nimbusError.message);
-        // Don't fail — payment is done, just retry shipment manually
-        console.error('Shiprocket failed after payment:', nimbusError.message);
-      }
-
-      res.status(200).json({
+    // ✅ FIX: guard against double-verification
+    const existingOrder = await Checkout.findById(orderId);
+    if (!existingOrder) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+    if (existingOrder.paymentStatus === 'completed') {
+      const orderNumber = existingOrder._id.toString().slice(-8).toUpperCase();
+      return res.status(200).json({
         success: true,
-        message: 'Payment verified and order confirmed',
+        message: 'Payment already verified',
         data: {
-          orderId:       order._id,
-          orderNumber:   order._id.toString().slice(-8).toUpperCase(),
-          paymentStatus: order.paymentStatus,
-          orderStatus:   order.orderStatus,
-       tracking: { awb: order.srAwb || null, courier: order.srCourier || null }
+          orderId:       existingOrder._id,
+          orderNumber,
+          paymentStatus: existingOrder.paymentStatus,
+          orderStatus:   existingOrder.orderStatus,
+          tracking:      { awb: existingOrder.srAwb || null, courier: existingOrder.srCourier || null }
         }
       });
+    }
 
-    } catch (error) {
-      console.error('Payment verification error:', error);
-      res.status(500).json({
+    const isValid = verifyPaymentSignature(
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature
+    );
+
+    if (!isValid) {
+      await Checkout.findByIdAndUpdate(orderId, {
+        paymentStatus: 'failed',
+        orderStatus:   'pending'
+      });
+      return res.status(400).json({
         success: false,
-        message: 'Payment verification failed',
-        error:   error.message
+        message: 'Payment verification failed. Please contact support.'
       });
     }
-  };
+
+    let order = await Checkout.findByIdAndUpdate(
+      orderId,
+      {
+        paymentStatus: 'completed',
+        transactionId: razorpay_payment_id,
+        orderStatus:   'confirmed',
+        $unset: { expiresAt: 1 }  // ✅ remove TTL so order isn't auto-deleted
+      },
+      { new: true }
+    );
+
+    if (order.userId) {
+      try {
+        await Cart.findOneAndUpdate(
+          { userId: order.userId },
+          { $set: { items: [] } }
+        );
+      } catch (cartError) {
+        console.error('Error clearing cart after payment:', cartError);
+      }
+    }
+
+    const orderNumber = order._id.toString().slice(-8).toUpperCase();
+
+    try {
+      const srData = await createShipment({ ...order.toObject(), orderNumber });
+      if (srData) {
+        order = await Checkout.findByIdAndUpdate(
+          orderId,
+          {
+            srOrderId:      srData.order_id?.toString() || null,
+            srAwb:          srData.awb_code || null,
+            srCourier:      srData.courier_name || null,
+            trackingNumber: srData.awb_code || null,
+          },
+          { new: true }
+        );
+      }
+    } catch (srError) {
+      console.error('Shiprocket failed after payment:', srError.message);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Payment verified and order confirmed',
+      data: {
+        orderId:       order._id,
+        orderNumber,
+        paymentStatus: order.paymentStatus,
+        orderStatus:   order.orderStatus,
+        tracking:      { awb: order.srAwb || null, courier: order.srCourier || null }
+      }
+    });
+
+  } catch (error) {
+    console.error('Payment verification error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Payment verification failed',
+      error:   error.message
+    });
+  }
+};
 
 
 //   exports.nimbusWebhook = async (req, res) => {
