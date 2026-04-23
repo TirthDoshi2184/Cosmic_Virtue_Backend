@@ -161,7 +161,6 @@ items: [{
   // Add inside your schema definition:
 expiresAt: {
   type: Date,
-  default: () => new Date(Date.now() + 30 * 60 * 1000), // auto-expire after 30 mins
   index: { expireAfterSeconds: 0 }  // MongoDB TTL — auto-deletes unpaid orders
 },
 

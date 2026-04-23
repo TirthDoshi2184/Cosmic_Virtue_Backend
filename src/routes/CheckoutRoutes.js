@@ -12,7 +12,7 @@ router.post('/auth/verify-otp', checkoutController.verifyOTP);
 // ADDRESS ROUTES (Public - Email Based)
 // ============================================
 router.post('/addresses', checkoutController.saveAddress);
-router.get('/addresses/by-phone/:phone', checkoutController.getAddressesByPhone);
+router.get('/addresses/:phone', checkoutController.getAddressesByPhone);
 router.delete('/addresses/:addressId', checkoutController.deleteAddress);
 
 // ============================================
@@ -32,6 +32,7 @@ router.patch('/orders/:orderId/cancel', checkoutController.cancelOrder);
 // ADD these 2 routes under ORDER ROUTES
 router.post('/payment/create-order',  checkoutController.createPaymentOrder);
 router.post('/payment/verify',        checkoutController.verifyAndConfirmPayment);
+router.post('/payment/verify-and-create', checkoutController.verifyAndCreateOrder);
 
 // ADD at the bottom — no auth needed, NimbusPost calls this
 router.post('/webhooks/shiprocket', checkoutController.shiprocketWebhook);

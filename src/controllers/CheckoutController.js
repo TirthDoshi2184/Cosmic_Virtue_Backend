@@ -829,6 +829,113 @@ exports.confirmCODShipment = async (orderId, orderNumber) => {
   }
 };
 
+exports.verifyAndCreateOrder = async (req, res) => {
+  try {
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      orderData
+    } = req.body;
+
+    // 1. Verify signature first — before touching DB
+    const isValid = verifyPaymentSignature(
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature
+    );
+
+    if (!isValid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Payment verification failed. Please contact support.'
+      });
+    }
+
+    // 2. Signature valid — now create the order in DB
+    const { contactInfo, shippingAddress, billingAddress, items, paymentMethod, pricing, phoneVerified, userId } = orderData;
+
+    const formattedItems = items.map(item => ({
+      productId: item.productId || item.id,
+      name: item.name,
+      price: item.price,
+      quantity: item.quantity,
+      image: Array.isArray(item.image) ? item.image[0] : item.image,
+      size: item.size || 'Standard'
+    }));
+
+    const order = await Checkout.create({
+      contactInfo,
+      shippingAddress,
+      billingAddress: billingAddress || shippingAddress,
+      items: formattedItems,
+      paymentMethod,
+      pricing,
+      phoneVerified: phoneVerified || false,
+      userId: userId || null,
+      orderStatus: 'confirmed',        // ✅ confirmed immediately
+      paymentStatus: 'completed',      // ✅ already paid
+      transactionId: razorpay_payment_id,
+      expiresAt: undefined             // ✅ no TTL — order is permanent
+    });
+
+    const orderNumber = order._id.toString().slice(-8).toUpperCase();
+
+    // 3. Clear cart for logged-in users
+    if (userId) {
+      try {
+        await Cart.findOneAndUpdate({ userId }, { $set: { items: [] } });
+      } catch (e) {
+        console.error('Cart clear failed:', e);
+      }
+    }
+
+    // 4. Send confirmation email
+    try {
+      await sendOrderConfirmationEmail(contactInfo.email, orderNumber, pricing.total, order);
+    } catch (e) {
+      console.error('Email failed:', e);
+    }
+
+    // 5. Create shipment (fire and forget)
+    const savedOrder = order;
+    (async () => {
+      try {
+        const srData = await createShipment({ ...savedOrder.toObject(), orderNumber });
+        if (srData) {
+          await Checkout.findByIdAndUpdate(savedOrder._id, {
+            srOrderId: srData.order_id?.toString() || null,
+            srAwb: srData.awb_code || null,
+            srCourier: srData.courier_name || null,
+            trackingNumber: srData.awb_code || null,
+          });
+        }
+      } catch (e) {
+        console.error('Shiprocket failed:', e.message);
+      }
+    })();
+
+    res.status(201).json({
+      success: true,
+      message: 'Payment verified and order confirmed',
+      data: {
+        orderId: order._id,
+        orderNumber,
+        paymentStatus: order.paymentStatus,
+        orderStatus: order.orderStatus,
+        tracking: { awb: null, courier: null } // Shiprocket runs async
+      }
+    });
+
+  } catch (error) {
+    console.error('verifyAndCreateOrder error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Order creation failed after payment',
+      error: error.message
+    });
+  }
+};
 
 //   exports.nimbusWebhook = async (req, res) => {
 //     try {
