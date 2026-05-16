@@ -35,7 +35,7 @@ router.post('/payment/verify',        checkoutController.verifyAndConfirmPayment
 router.post('/payment/verify-and-create', checkoutController.verifyAndCreateOrder);
 
 // ADD at the bottom — no auth needed, NimbusPost calls this
-router.post('/webhooks/shiprocket', checkoutController.shiprocketWebhook);
+router.post('/webhooks/shipping', checkoutController.shiprocketWebhook);
 // ADD this new route (place it under ORDER ROUTES)
 router.get('/orders/:orderId/track', async (req, res) => {
   try {
