@@ -165,11 +165,12 @@ expiresAt: {
 },
 
   // Order Status
-  orderStatus: {
-    type: String,
-    enum: ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled'],
-    default: 'pending'
-  },
+  // ✅ Add the missing values
+orderStatus: {
+  type: String,
+  enum: ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'ndr', 'rto', 'rto_complete'],
+  default: 'pending'
+},
 
   // User Reference (optional - for logged in users)
   userId: {
@@ -199,6 +200,14 @@ expiresAt: {
 srAwb: { type: String },
 srCourier: { type: String },
 srOrderId: { type: String },
+// Add these to your existing Checkout schema
+ndrReason:       { type: String, default: null },
+ndrCount:        { type: Number, default: 0 },      // how many failed attempts
+rtoInitiatedAt:  { type: Date,   default: null },
+rtoDeliveredAt:  { type: Date,   default: null },
+awbAssignedAt:   { type: Date,   default: null },
+lastWebhookAt:   { type: Date,   default: null },    // debug: last webhook received
+lastWebhookEvent:{ type: String, default: null },    // debug: last event name
 
   // Timestamps
   orderDate: {
@@ -208,7 +217,8 @@ srOrderId: { type: String },
   
   deliveredAt: {
     type: Date
-  }
+  },
+
 }, {
   timestamps: true
 }

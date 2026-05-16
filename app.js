@@ -23,6 +23,8 @@ app.use(cors({
   credentials: true
 }));
 
+app.use('/checkout/webhooks/shiprocket', express.raw({ type: 'application/json' }));
+
 // Middleware
 app.use(express.json());
 

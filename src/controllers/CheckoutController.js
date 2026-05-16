@@ -3,7 +3,7 @@
   // const OTP = require('../models/OtpModel');
   // ADD this line after your existing requires
   // const { createShipment, trackShipment, cancelShipment,checkServiceability } = require('../utils/nimbuspost');
-  const { createShipment, trackShipment, cancelShipment, checkServiceability } = require('../utils/shiprocket');
+  const { createShipment, trackShipment, cancelShipment, checkServiceability,verifyWebhookSignature } = require('../utils/shiprocket');
   const { createRazorpayOrder, verifyPaymentSignature } = require('../utils/razorpay');
   const Cart = require('../models/CartModel');
   const { sendEmai, sendOrderConfirmationEmail, sendOrderConfirmationSMS,sendEmailSafe } = require('../utils/email');
@@ -1047,61 +1047,233 @@ exports.checkServiceability = async (req, res) => {
   }
 };
 
+
 exports.shiprocketWebhook = async (req, res) => {
+  // ── 1. Signature verification ─────────────────────────────────────────
+  const signature = req.headers['x-shiprocket-signature'];
+  const rawBody   = req.body; // Buffer because of express.raw()
+
+  if (!verifyWebhookSignature(rawBody, signature)) {
+    console.warn('Shiprocket webhook: invalid signature — rejected');
+    return res.status(401).json({ success: false, message: 'Invalid signature' });
+  }
+
+  // ── 2. Parse body ──────────────────────────────────────────────────────
+  let payload;
   try {
-    console.log('Shiprocket Webhook:', JSON.stringify(req.body, null, 2));
+    payload = JSON.parse(rawBody.toString());
+  } catch (e) {
+    return res.status(400).json({ success: false, message: 'Invalid JSON' });
+  }
 
-    const { awb, current_status, order_id } = req.body;
+  // Always 200 after this point — Shiprocket retries on non-200
+  res.status(200).json({ success: true });
 
-    const statusMap = {
-      'Pickup Scheduled': 'confirmed',
-      'Picked Up': 'processing',
-      'In Transit': 'shipped',
-      'Out For Delivery': 'shipped',
-      'Delivered': 'delivered',
-      'Cancelled': 'cancelled',
-      'RTO Initiated': 'cancelled',
-      'RTO Delivered': 'cancelled',
-      'Undelivered': 'shipped',
+  // ── 3. Process asynchronously (response already sent) ─────────────────
+  try {
+    console.log('Shiprocket Webhook payload:', JSON.stringify(payload, null, 2));
+
+    const {
+      awb,
+      order_id,          // Shiprocket's internal order ID
+      current_status,
+      current_status_id, // numeric status code
+      location,
+      etd,               // estimated delivery date
+      reason,            // NDR reason / RTO reason
+    } = payload;
+
+    // ── 4. Status map ──────────────────────────────────────────────────
+    //   Covers: shipment, AWB, RTO, NDR events
+    const STATUS_MAP = {
+      // Standard shipment statuses
+      'Pickup Scheduled':     { order: 'confirmed',   label: 'Pickup Scheduled' },
+      'Pickup Generated':     { order: 'confirmed',   label: 'Pickup Generated' },
+      'Picked Up':            { order: 'processing',  label: 'Picked Up' },
+      'In Transit':           { order: 'shipped',     label: 'In Transit' },
+      'Out For Delivery':     { order: 'shipped',     label: 'Out For Delivery' },
+      'Delivered':            { order: 'delivered',   label: 'Delivered' },
+
+      // AWB events
+      'AWB Assigned':         { order: null,          label: 'AWB Assigned' }, // only update AWB, not status
+
+      // NDR (Non-Delivery Report)
+      'Undelivered':          { order: 'ndr',         label: 'Delivery Attempted' },
+      'NDR':                  { order: 'ndr',         label: 'Delivery Attempted' },
+      'Delivery Failed':      { order: 'ndr',         label: 'Delivery Failed' },
+
+      // RTO
+      'RTO Initiated':        { order: 'rto',         label: 'Return Initiated' },
+      'RTO In Transit':       { order: 'rto',         label: 'Return In Transit' },
+      'RTO Out For Pickup':   { order: 'rto',         label: 'Return Out For Pickup' },
+      'RTO Delivered':        { order: 'rto_complete', label: 'Returned To Origin' },
+
+      // Cancellation
+      'Cancelled':            { order: 'cancelled',   label: 'Cancelled' },
     };
 
-    const mappedStatus = statusMap[current_status];
+    const matched = STATUS_MAP[current_status];
 
-    if (mappedStatus && (awb || order_id)) {
-      const order = await Checkout.findOne({
-        $or: [
-          { srAwb: awb },
-          { srOrderId: order_id?.toString() }
-        ]
-      });
+    if (!matched && !awb) {
+      console.log(`Shiprocket webhook: unhandled event "${current_status}" — ignoring`);
+      return;
+    }
 
-      if (order) {
-        order.orderStatus = mappedStatus;
-        if (awb) { order.srAwb = awb; order.trackingNumber = awb; }
+    // ── 5. Find the order ──────────────────────────────────────────────
+    const query = { $or: [] };
+    if (awb)      query.$or.push({ srAwb: awb });
+    if (order_id) query.$or.push({ srOrderId: order_id?.toString() });
 
-        if (mappedStatus === 'delivered') {
-          order.deliveredAt = new Date();
-          order.paymentStatus = 'completed';
-        }
+    if (!query.$or.length) {
+      console.warn('Shiprocket webhook: no awb or order_id in payload');
+      return;
+    }
 
-        await order.save();
+    const order = await Checkout.findOne(query);
 
-        if (mappedStatus === 'delivered') {
-          try {
-            const orderNumber = order._id.toString().slice(-8).toUpperCase();
-            await sendEmailSafe(
-              order.contactInfo.email,
-              `Your Order #${orderNumber} has been Delivered! 🎉`,
-              `Hi ${order.contactInfo.firstName}, your order has been delivered. Thank you!`
-            );
-          } catch (e) { console.error('Delivery email failed:', e); }
-        }
+    if (!order) {
+      console.warn(`Shiprocket webhook: no order found for awb=${awb}, order_id=${order_id}`);
+      return;
+    }
+
+    const orderNumber = order._id.toString().slice(-8).toUpperCase();
+    const customerName = `${order.contactInfo.firstName} ${order.contactInfo.lastName}`;
+    const customerEmail = order.contactInfo.email;
+
+    // ── 6. Apply updates ───────────────────────────────────────────────
+    const updates = {
+      lastWebhookAt:    new Date(),
+      lastWebhookEvent: current_status,
+    };
+
+    // Always update AWB if provided and not already set
+    if (awb && !order.srAwb) {
+      updates.srAwb          = awb;
+      updates.trackingNumber = awb;
+      updates.awbAssignedAt  = new Date();
+    }
+
+    if (matched?.order) {
+      updates.orderStatus = matched.order;
+    }
+
+    // Status-specific field updates
+    if (current_status === 'Delivered') {
+      updates.deliveredAt   = new Date();
+      updates.paymentStatus = 'completed'; // auto-complete COD on delivery
+    }
+
+    if (['Undelivered', 'NDR', 'Delivery Failed'].includes(current_status)) {
+      updates.ndrReason = reason || 'Delivery attempt failed';
+      updates.$inc      = { ndrCount: 1 };
+    }
+
+    if (current_status === 'RTO Initiated') {
+      updates.rtoInitiatedAt = new Date();
+    }
+
+    if (current_status === 'RTO Delivered') {
+      updates.rtoDeliveredAt = new Date();
+    }
+
+    // Use $inc separately from the main update
+    const incUpdate = updates.$inc;
+    delete updates.$inc;
+
+    await Checkout.findByIdAndUpdate(
+      order._id,
+      { $set: updates, ...(incUpdate ? { $inc: incUpdate } : {}) }
+    );
+
+    console.log(`✅ Order ${orderNumber} updated: ${current_status} → ${matched?.order || '(AWB only)'}`);
+
+    // ── 7. Customer emails ────────────────────────────────────────────
+    const emailTasks = [];
+
+    if (current_status === 'AWB Assigned' && awb) {
+      emailTasks.push(
+        sendEmailSafe(
+          customerEmail,
+          `Your Order #${orderNumber} has been Picked Up & Assigned a Tracking Number`,
+          `Hi ${customerName},\n\nGreat news! Your order #${orderNumber} has been picked up by our courier partner.\n\nTracking AWB: ${awb}\nCourier: ${order.srCourier || 'Our courier partner'}\n\nYou can track your shipment using the AWB number above.\n\nThank you for shopping with us!`
+        )
+      );
+    }
+
+    if (current_status === 'Out For Delivery') {
+      emailTasks.push(
+        sendEmailSafe(
+          customerEmail,
+          `Your Order #${orderNumber} is Out For Delivery Today! 🚚`,
+          `Hi ${customerName},\n\nYour order #${orderNumber} is out for delivery today!\n\nPlease ensure someone is available to receive it.\n\nTracking AWB: ${order.srAwb || awb}\n\nThank you for your patience!`
+        )
+      );
+    }
+
+    if (current_status === 'Delivered') {
+      emailTasks.push(
+        sendEmailSafe(
+          customerEmail,
+          `Your Order #${orderNumber} has been Delivered! 🎉`,
+          `Hi ${customerName},\n\nYour order #${orderNumber} has been successfully delivered.\n\nWe hope you love your purchase! If you have any issues, please contact our support.\n\nThank you for shopping with us!`
+        )
+      );
+    }
+
+    if (['Undelivered', 'NDR', 'Delivery Failed'].includes(current_status)) {
+      emailTasks.push(
+        sendEmailSafe(
+          customerEmail,
+          `Delivery Attempt Failed for Order #${orderNumber} — Action Required`,
+          `Hi ${customerName},\n\nWe attempted to deliver your order #${orderNumber} but were unable to complete the delivery.\n\nReason: ${reason || 'Delivery attempt failed'}\n\nPlease ensure someone is available at your delivery address for the next attempt, or contact us to reschedule.\n\nDelivery Address:\n${order.shippingAddress.address}, ${order.shippingAddress.city} - ${order.shippingAddress.pincode}\n\nContact us to update your address or reschedule delivery.`
+        )
+      );
+    }
+
+    if (current_status === 'RTO Initiated') {
+      emailTasks.push(
+        sendEmailSafe(
+          customerEmail,
+          `Your Order #${orderNumber} is Being Returned`,
+          `Hi ${customerName},\n\nUnfortunately, your order #${orderNumber} could not be delivered and is being returned to us.\n\nReason: ${reason || 'Multiple delivery attempts failed'}\n\nIf this was a prepaid order, a refund will be processed once we receive the package. Please allow 5-7 business days.\n\nPlease contact our support if you have any questions.`
+        )
+      );
+    }
+
+    if (current_status === 'Cancelled') {
+      emailTasks.push(
+        sendEmailSafe(
+          customerEmail,
+          `Your Order #${orderNumber} has been Cancelled`,
+          `Hi ${customerName},\n\nYour order #${orderNumber} has been cancelled.\n\nIf this was a prepaid order, your refund will be processed within 5-7 business days.\n\nPlease contact us if you have any questions.`
+        )
+      );
+    }
+
+    // ── 8. Admin notification emails ──────────────────────────────────
+    const adminEmail = process.env.ADMIN_EMAIL;
+    if (adminEmail) {
+      const adminNotifyEvents = [
+        'Delivered', 'RTO Initiated', 'RTO Delivered',
+        'Undelivered', 'NDR', 'Delivery Failed', 'Cancelled'
+      ];
+
+      if (adminNotifyEvents.includes(current_status)) {
+        emailTasks.push(
+          sendEmailSafe(
+            adminEmail,
+            `[Admin] Order #${orderNumber} — ${current_status}`,
+            `Order #${orderNumber} status update:\n\nEvent: ${current_status}\nCustomer: ${customerName} (${customerEmail})\nPhone: ${order.contactInfo.phone}\nAWB: ${awb || order.srAwb}\nReason: ${reason || 'N/A'}\nLocation: ${location || 'N/A'}\nETD: ${etd || 'N/A'}\n\nOrder ID: ${order._id}`
+          )
+        );
       }
     }
 
-    res.status(200).json({ success: true });
-  } catch (error) {
-    console.error('Webhook error:', error);
-    res.status(200).json({ success: true }); // always 200 to prevent retries
+    // Fire all emails concurrently, non-blocking
+    await Promise.allSettled(emailTasks);
+
+  } catch (err) {
+    console.error('Shiprocket webhook processing error:', err.message);
+    // Response already sent — just log
   }
 };

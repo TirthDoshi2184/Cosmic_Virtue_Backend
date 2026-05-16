@@ -1,10 +1,32 @@
 const axios = require('axios');
+const crypto = require('crypto');
 
 const BASE_URL = 'https://apiv2.shiprocket.in/v1/external';
 
 // Token cache — valid for 10 days (240 hrs), refresh every 9 days to be safe
 let cachedToken = null;
 let tokenExpiry = null;
+
+
+/**
+ * Verifies the X-Shiprocket-Signature header.
+ * Shiprocket signs the raw request body with HMAC-SHA256
+ * using your webhook secret.
+ */
+const verifyWebhookSignature = (rawBody, signatureHeader) => {
+  if (!process.env.SHIPROCKET_WEBHOOK_SECRET) {
+    console.warn('SHIPROCKET_WEBHOOK_SECRET not set — skipping verification');
+    return true; // fail open in dev; tighten in prod
+  }
+  const expected = crypto
+    .createHmac('sha256', process.env.SHIPROCKET_WEBHOOK_SECRET)
+    .update(rawBody)
+    .digest('hex');
+  return crypto.timingSafeEqual(
+    Buffer.from(expected),
+    Buffer.from(signatureHeader || '')
+  );
+};
 
 const getShiprocketToken = async () => {
   if (cachedToken && tokenExpiry && Date.now() < tokenExpiry) {
@@ -131,4 +153,5 @@ module.exports = {
   createShipment,
   trackShipment,
   cancelShipment,
+  verifyWebhookSignature
 };
