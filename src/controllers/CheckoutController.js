@@ -1050,39 +1050,35 @@ exports.checkServiceability = async (req, res) => {
 
 exports.shiprocketWebhook = async (req, res) => {
   // ── 1. Signature verification ─────────────────────────────────────────
-  const signature = req.headers['x-shiprocket-signature'];
-  const rawBody   = req.body; // Buffer because of express.raw()
-
-  if (!verifyWebhookSignature(rawBody, signature)) {
+  if (!verifyWebhookSignature(req)) {
     console.warn('Shiprocket webhook: invalid signature — rejected');
     return res.status(401).json({ success: false, message: 'Invalid signature' });
   }
 
   // ── 2. Parse body ──────────────────────────────────────────────────────
-  let payload;
-  try {
-    payload = JSON.parse(rawBody.toString());
-  } catch (e) {
-    return res.status(400).json({ success: false, message: 'Invalid JSON' });
+   // ── 2. Body is already parsed by express.json() ────────────────────────
+  const payload = req.body;
+
+  if (!payload || typeof payload !== 'object') {
+    return res.status(400).json({ success: false, message: 'Invalid payload' });
   }
 
   // Always 200 after this point — Shiprocket retries on non-200
   res.status(200).json({ success: true });
 
-  // ── 3. Process asynchronously (response already sent) ─────────────────
+  // ── 3. Everything else below stays exactly the same ────────────────────
   try {
     console.log('Shiprocket Webhook payload:', JSON.stringify(payload, null, 2));
 
     const {
       awb,
-      order_id,          // Shiprocket's internal order ID
+      order_id,
       current_status,
-      current_status_id, // numeric status code
       location,
-      etd,               // estimated delivery date
-      reason,            // NDR reason / RTO reason
+      etd,
+      reason,
     } = payload;
-
+    
     // ── 4. Status map ──────────────────────────────────────────────────
     //   Covers: shipment, AWB, RTO, NDR events
     const STATUS_MAP = {

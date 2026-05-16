@@ -13,21 +13,18 @@ let tokenExpiry = null;
  * Shiprocket signs the raw request body with HMAC-SHA256
  * using your webhook secret.
  */
-const verifyWebhookSignature = (rawBody, signatureHeader) => {
-  if (!process.env.SHIPROCKET_WEBHOOK_SECRET) {
-    console.warn('SHIPROCKET_WEBHOOK_SECRET not set — skipping verification');
-    return true; // fail open in dev; tighten in prod
-  }
-  const expected = crypto
-    .createHmac('sha256', process.env.SHIPROCKET_WEBHOOK_SECRET)
-    .update(rawBody)
-    .digest('hex');
-  return crypto.timingSafeEqual(
-    Buffer.from(expected),
-    Buffer.from(signatureHeader || '')
-  );
-};
+// Replace the old HMAC verifyWebhookSignature with this
+const verifyWebhookSignature = (req) => {
+  const token = req.headers['x-api-key'];
+  const expected = process.env.SHIPROCKET_WEBHOOK_SECRET; // set this to 'cosmicvirtue'
 
+  if (!expected) {
+    console.warn('SHIPROCKET_WEBHOOK_SECRET not set — skipping verification');
+    return true;
+  }
+
+  return token === expected;
+};
 const getShiprocketToken = async () => {
   if (cachedToken && tokenExpiry && Date.now() < tokenExpiry) {
     return cachedToken;
