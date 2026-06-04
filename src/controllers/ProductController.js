@@ -222,6 +222,21 @@ const getBestSellers = async (req, res) => {
     }
 };
 
+const getSummerSaleProducts = async (req, res) => {
+    try {
+        const products = await ProductSchema.find({ isSummerSale: true })
+            .populate('category', 'name')
+            .select('name price img isNewArrival isBestSeller category rating dimension salePercentage offerPrice')
+            .sort({ createdAt: -1 })
+            .limit(6)
+            .lean();
+
+        res.status(200).json({ data: products, message: "Successfully got summer sale products" });
+    } catch (error) {
+        res.status(500).json({ message: "Error fetching summer sale products", error: error.message });
+    }
+};
+
 module.exports = {
     createProduct,
     getAllProducts,
@@ -230,6 +245,7 @@ module.exports = {
     deleteProduct,
     createmultipleProducts,
     getNewArrivals,
-    getBestSellers
+    getBestSellers,
+    getSummerSaleProducts
 };
 

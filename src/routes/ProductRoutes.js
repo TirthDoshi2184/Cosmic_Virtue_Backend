@@ -19,6 +19,7 @@ router.delete('/:id', ProductController.deleteProduct);
 
 router.get('/new-arrivals', ProductController.getNewArrivals);
 router.get('/best-sellers', ProductController.getBestSellers);
+router.get('/summer-sale', ProductController.getSummerSaleProducts);
 
 // Route to get a product by ID
 router.get('/:id', ProductController.getProductbyId);

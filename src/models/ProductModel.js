@@ -50,6 +50,14 @@ const ProductSchema = new Schema({
         type: Boolean,
         default: false,
     },
+    isSummerSale: {
+        type: Boolean,
+        default: false,
+    },
+    offerPrice:{
+        type: Number,
+        min: 0,
+    }
 }, { timestamps: true });
 
 // ── INDEXES FOR FASTER QUERIES ──────────────────────────────────────────────
