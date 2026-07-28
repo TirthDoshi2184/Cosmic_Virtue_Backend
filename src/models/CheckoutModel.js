@@ -97,31 +97,13 @@ const checkoutSchema = new mongoose.Schema({
   // Order Items
   // In the items array schema
 items: [{
-  productId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Product',
-    required: false  // Make it optional for guest orders
-  },
-  name: {
-    type: String,
-    required: true
-  },
-  price: {
-    type: Number,
-    required: true
-  },
-  quantity: {
-    type: Number,
-    required: true,
-    min: 1
-  },
-  image: {
-    type: String
-  },
-  size: {
-    type: String,
-    default: 'Standard'
-  }
+  productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: false },
+  name: { type: String, required: true },
+  price: { type: Number, required: true },
+  quantity: { type: Number, required: true, min: 1 },
+  image: { type: String },
+  size: { type: String, default: 'Standard' },
+  weight: { type: Number, default: 300 },   // ADD THIS — grams per unit, copied from Product.dimension.weight
 }],
   // Payment Information
   paymentMethod: {
@@ -200,6 +182,7 @@ orderStatus: {
 srAwb: { type: String },
 srCourier: { type: String },
 srOrderId: { type: String },
+srShipmentId: { type: String },
 // Add these to your existing Checkout schema
 ndrReason:       { type: String, default: null },
 ndrCount:        { type: Number, default: 0 },      // how many failed attempts

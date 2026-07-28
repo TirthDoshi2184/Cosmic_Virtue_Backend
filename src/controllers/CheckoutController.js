@@ -1,5 +1,6 @@
   const Checkout = require('../models/CheckoutModel');
   const Address = require('../models/AddressModel');
+  const Product = require('../models/ProductModel');
   // const OTP = require('../models/OtpModel');
   // ADD this line after your existing requires
   // const { createShipment, trackShipment, cancelShipment,checkServiceability } = require('../utils/nimbuspost');
@@ -387,15 +388,23 @@ exports.verifyOTP = async (req, res) => {
       }
 
       // Transform items to ensure proper format
-      const formattedItems = items.map(item => ({
-        productId: item.productId || item.id,
-        name: item.name,
-        price: item.price,
-        quantity: item.quantity,
-         image: Array.isArray(item.image) ? item.image[0] : item.image, 
-        size: item.size || 'Standard'
-      }));
+     const productIds = items.map(item => item.productId || item.id).filter(Boolean);
+const products = await Product.find({ _id: { $in: productIds } }).select('dimension.weight');
+const weightMap = {};
+products.forEach(p => { weightMap[p._id.toString()] = p.dimension?.weight || 300; });
 
+const formattedItems = items.map(item => {
+  const pid = item.productId || item.id;
+  return {
+    productId: pid,
+    name: item.name,
+    price: item.price,
+    quantity: item.quantity,
+    image: Array.isArray(item.image) ? item.image[0] : item.image,
+    size: item.size || 'Standard',
+    weight: weightMap[pid?.toString()] || 300,
+  };
+});
       // Create order
       const order = await Checkout.create({
         contactInfo,
@@ -495,6 +504,7 @@ exports.confirmCODShipment = async (orderId, orderNumber) => {
       order.srAwb          = srData.awb_code || null;
       order.srCourier      = srData.courier_name || null;
       order.trackingNumber = srData.awb_code || null;
+      order.srShipmentId   = srData.shipment_id?.toString() || null;
       await order.save();
     }
   } catch (err) {
@@ -653,7 +663,7 @@ exports.confirmCODShipment = async (orderId, orderNumber) => {
       // Send cancellation SMS
       try {
         const orderNumber = order._id.toString().slice(-8).toUpperCase();
-        await sendOrderStatusSMS(
+        await sendOrderConfirmationSMS(
           order.contactInfo.phone,
           orderNumber,
           'cancelled'
@@ -799,6 +809,7 @@ exports.confirmCODShipment = async (orderId, orderNumber) => {
             srAwb:          srData.awb_code || null,
             srCourier:      srData.courier_name || null,
             trackingNumber: srData.awb_code || null,
+            srShipmentId: srData.shipment_id?.toString() || null,
           },
           { new: true }
         );
@@ -855,15 +866,23 @@ exports.verifyAndCreateOrder = async (req, res) => {
     // 2. Signature valid — now create the order in DB
     const { contactInfo, shippingAddress, billingAddress, items, paymentMethod, pricing, phoneVerified, userId } = orderData;
 
-    const formattedItems = items.map(item => ({
-      productId: item.productId || item.id,
-      name: item.name,
-      price: item.price,
-      quantity: item.quantity,
-      image: Array.isArray(item.image) ? item.image[0] : item.image,
-      size: item.size || 'Standard'
-    }));
+    const productIds = items.map(item => item.productId || item.id).filter(Boolean);
+const products = await Product.find({ _id: { $in: productIds } }).select('dimension.weight');
+const weightMap = {};
+products.forEach(p => { weightMap[p._id.toString()] = p.dimension?.weight || 300; });
 
+const formattedItems = items.map(item => {
+  const pid = item.productId || item.id;
+  return {
+    productId: pid,
+    name: item.name,
+    price: item.price,
+    quantity: item.quantity,
+    image: Array.isArray(item.image) ? item.image[0] : item.image,
+    size: item.size || 'Standard',
+    weight: weightMap[pid?.toString()] || 300,
+  };
+});
     const order = await Checkout.create({
       contactInfo,
       shippingAddress,
@@ -908,6 +927,7 @@ exports.verifyAndCreateOrder = async (req, res) => {
             srAwb: srData.awb_code || null,
             srCourier: srData.courier_name || null,
             trackingNumber: srData.awb_code || null,
+            srShipmentId: srData.shipment_id?.toString() || null,
           });
         }
       } catch (e) {

@@ -23,11 +23,6 @@ router.get('/orders/:orderId', checkoutController.getOrderById);
 router.get('/orders/phone/:phone', checkoutController.getOrdersByPhone);
 router.get('/orders/user/:userId', checkoutController.getOrdersByUserId);
 
-// ============================================
-// ADMIN ROUTES (Should be protected in future)
-// ============================================
-router.patch('/orders/:orderId/status', checkoutController.updateOrderStatus);
-router.patch('/orders/:orderId/cancel', checkoutController.cancelOrder);
 
 // ADD these 2 routes under ORDER ROUTES
 router.post('/payment/create-order',  checkoutController.createPaymentOrder);

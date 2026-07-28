@@ -32,19 +32,18 @@ router.use(adminMiddleware); // apply once — covers all routes below
 // Stats / dashboard  (must come before /:orderId to avoid route collision)
 router.get('/orders/stats', adminOrderController.getDashboardStats);
 
-// Listing + detail
 router.get('/orders',           adminOrderController.getAllOrders);
 router.get('/orders/:orderId',  adminOrderController.getOrderDetail);
 
-// Mutations
-router.patch('/orders/:orderId/status',          adminOrderController.updateOrderStatus);
-router.patch('/orders/:orderId/cancel',          adminOrderController.cancelOrder);
-router.get(  '/orders/:orderId/track',           adminOrderController.trackOrder);
-router.post( '/orders/:orderId/retry-shipment',  adminOrderController.retryShipment);
-
-router.post('/orders/:orderId/ship', adminMiddleware, adminOrderController.shipOrder);
-router.post('/orders/:orderId/label', adminMiddleware, adminOrderController.getShipmentLabel);
-
+router.patch('/orders/:orderId/status',           adminOrderController.updateOrderStatus);
+router.patch('/orders/:orderId/cancel',           adminOrderController.cancelOrder);
+router.get(  '/orders/:orderId/track',            adminOrderController.trackOrder);
+router.get(  '/orders/:orderId/refresh-shipment',adminOrderController.refreshShipmentStatus);
+router.get(  '/orders/:orderId/couriers',         adminOrderController.getAvailableCouriers);
+router.post( '/orders/:orderId/assign-courier',   adminOrderController.assignCourier);
+router.post( '/orders/:orderId/schedule-pickup',  adminOrderController.schedulePickup);
+router.get(  '/orders/:orderId/label',            adminOrderController.getShipmentLabel);
+router.get(  '/orders/:orderId/invoice',          adminOrderController.getInvoice);
 // ============================================================
 // PRODUCT ROUTES  —  /api/admin/products/...
 // ============================================================
